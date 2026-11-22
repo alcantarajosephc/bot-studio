@@ -1,0 +1,9 @@
+node_modules/
+dist/
+data/
+.env
+*.log
+# loose videos in the project root
+/*.mp4
+/*.mov
+data-demo/

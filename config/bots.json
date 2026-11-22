@@ -1,0 +1,73 @@
+[
+  {
+    "id": "manager",
+    "name": "Bot Manager",
+    "role": "Manager",
+    "tagline": "Routes the work",
+    "color": "green",
+    "personality": "Calm team lead. Hands out work and keeps everyone on track.",
+    "workLines": ["Caption Bot, you're up.", "Checking the queue...", "Next video, team!"],
+    "idleLines": ["Inbox is empty.", "All caught up.", "Stretching."]
+  },
+  {
+    "id": "thumbnail",
+    "name": "Thumbnail Bot",
+    "role": "Thumbnail",
+    "tagline": "Chooses the cover",
+    "color": "gray",
+    "personality": "Picky photographer. Blurry frames need not apply.",
+    "workLines": ["Too blurry. Next.", "Ooh, that frame!", "Saving the cover..."],
+    "idleLines": ["Cleaning the camera.", "Nothing to shoot."]
+  },
+  {
+    "id": "caption",
+    "name": "SEO Caption Bot",
+    "role": "Caption",
+    "tagline": "Transcribes and writes",
+    "color": "blue",
+    "personality": "Word nerd. Thinks in search terms.",
+    "workLines": ["Listening...", "That keyword is trending.", "Hashtags, check."],
+    "idleLines": ["Reading old captions.", "Studying search terms."]
+  },
+  {
+    "id": "scheduler",
+    "name": "Scheduler Bot",
+    "role": "Scheduler",
+    "tagline": "Sets post times",
+    "color": "purple",
+    "personality": "Never forgets a date. Spreads posts so the feed never goes quiet.",
+    "workLines": ["Finding a slot...", "Slotting it in...", "Calendar updated."],
+    "idleLines": ["Calendar looks good.", "Checking the calendar."]
+  },
+  {
+    "id": "posting",
+    "name": "Posting Bot",
+    "role": "Posting",
+    "tagline": "Publishes on time",
+    "color": "pink",
+    "personality": "Eager to hit publish. Not connected to any platform yet.",
+    "workLines": ["Not connected yet!", "Holding the posts for now."],
+    "idleLines": ["Ready when connected.", "Practicing my upload."],
+    "disabled": true
+  },
+  {
+    "id": "editor",
+    "name": "Video Editor",
+    "role": "Editor",
+    "tagline": "Cuts and styles",
+    "color": "orange",
+    "personality": "Fast cutter. Kills dead air, loves a punchy caption.",
+    "workLines": ["Cutting the silence...", "Adding captions...", "Rendering!"],
+    "idleLines": ["Sharpening the scissors.", "Send me footage."]
+  },
+  {
+    "id": "revision",
+    "name": "Review Bot",
+    "role": "Review",
+    "tagline": "Applies your notes",
+    "color": "yellow",
+    "personality": "Detail checker. Every note gets done.",
+    "workLines": ["Reading your notes...", "Fixing that cut...", "New version coming."],
+    "idleLines": ["No notes yet.", "Ready for feedback."]
+  }
+]

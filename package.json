@@ -1,0 +1,49 @@
+{
+  "name": "bot-studio",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Bots that make covers, SEO captions and posting schedules for short videos, plus a video editor with a review loop.",
+  "scripts": {
+    "dev": "concurrently -n server,app -c blue,magenta \"npm:dev:server\" \"npm:dev:app\"",
+    "dev:server": "tsx watch --clear-screen=false server/index.ts",
+    "dev:app": "vite",
+    "start": "npm run build && tsx server/index.ts",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.12.0",
+    "@remotion/bundler": "^4.0.545",
+    "@remotion/google-fonts": "^4.0.545",
+    "@remotion/media-utils": "^4.0.545",
+    "@remotion/renderer": "^4.0.545",
+    "@xyflow/react": "^13.0.2",
+    "chokidar": "^6.0.0",
+    "express": "^5.3.0",
+    "luxon": "^3.7.2",
+    "mammoth": "^1.13.0",
+    "multer": "^2.5.0",
+    "pdf-parse": "^2.4.5",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "remotion": "^4.0.545",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/luxon": "^3.7.6",
+    "@types/multer": "^2.3.0",
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "concurrently": "^10.0.7",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.1"
+  }
+}
