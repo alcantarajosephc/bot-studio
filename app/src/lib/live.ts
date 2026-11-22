@@ -48,6 +48,8 @@ function apply(s: LiveState, e: ServerEvent): LiveState {
       return { ...s, projects: s.projects.filter((p) => p.id !== e.id) };
     case "settings":
       return { ...s, settings: e.settings };
+    case "training":
+      return { ...s, training: e.training };
   }
 }
 

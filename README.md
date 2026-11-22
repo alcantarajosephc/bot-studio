@@ -69,8 +69,12 @@ Everything stays in `data/`: videos, covers, captions, schedules, edits, style e
 
 ## Tests
 
-```powershell
-npm test
-```
+All tests use fake AI providers, so they run free and need no keys.
 
-46 tests: thumbnail scoring, caption prompts, scheduler rules, the timeline compiler, the full pipeline over HTTP, and a real Remotion render of a first version and a revised one. Tests use fake AI providers, so they need no keys.
+| Command | What runs |
+|---|---|
+| `npm test` | Vitest, 46 tests: thumbnail scoring, caption prompts, scheduler rules, the timeline compiler, the full pipeline over HTTP, and a real Remotion render of a first version and a revised one |
+| `npm run test:e2e` | Playwright, 28 tests in a real Chromium: every page and panel, uploading and dropping videos, Run everything and Running, caption rules and style training, scheduler changes, the office canvas, the editor → Review → revise loop, and keys never reaching the browser |
+| `npm run test:all` | Typecheck, then both of the above |
+
+The first time, install the test browser with `npx playwright install chromium`. The UI tests build the app and start their own server on port 4848 with a fresh data folder each run (`tests/e2e-server.ts`). After a failure, `npx playwright show-trace` opens the saved trace from `test-results/`.

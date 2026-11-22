@@ -143,11 +143,15 @@ export function createApp(sys: BotSystem) {
       }
     }
     ctx.bots.caption.log(`Learned from ${saved.length} new source${saved.length === 1 ? "" : "s"}.`);
-    res.json({ saved, training: listTraining() });
+    const training = listTraining();
+    ctx.bus.emit({ type: "training", training });
+    res.json({ saved, training });
   }));
   app.delete("/api/caption/training/:name", (req, res) => {
     deleteTraining(String(req.params.name));
-    res.json(listTraining());
+    const training = listTraining();
+    ctx.bus.emit({ type: "training", training });
+    res.json(training);
   });
 
   // ----- video editor + review -----

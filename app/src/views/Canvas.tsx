@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type DragEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { ReactFlow, Background, Handle, Position, useNodesInitialized, useReactFlow, type Edge, type Node, type NodeProps, type OnNodesChange } from "@xyflow/react";
 import type { BotMeta, BotState } from "../../../shared/types";
 import type { LiveState } from "../lib/live";
@@ -43,11 +43,8 @@ const ICON: Record<Kind, string> = { drop: "📥", thumbnail: "🖼️", caption
 function DropBody({ live }: { live: LiveState }) {
   const [over, setOver] = useState(false);
   const [msg, setMsg] = useState("");
-  const onDrop = async (e: DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setOver(false);
-    const files = [...e.dataTransfer.files];
+  const picker = useRef<HTMLInputElement>(null);
+  const send = async (files: File[]) => {
     if (!files.length) return;
     setMsg(`Uploading ${files.length}...`);
     try {
@@ -56,6 +53,12 @@ function DropBody({ live }: { live: LiveState }) {
     } catch (err) {
       setMsg((err as Error).message);
     }
+  };
+  const onDrop = async (e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setOver(false);
+    await send([...e.dataTransfer.files]);
   };
   const recent = live.videos.slice(-3);
   return (
@@ -68,11 +71,27 @@ function DropBody({ live }: { live: LiveState }) {
         }}
         onDragLeave={() => setOver(false)}
         onDrop={onDrop}
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          picker.current?.click();
+        }}
+        role="button"
+        title="Click to pick videos"
       >
-        Drop videos here
+        Drop videos here or click to pick
         <br />
-        <span className="hint">{msg || "or into data/inbox"}</span>
+        <span className="hint">{msg || "or copy them into data/inbox"}</span>
+        <input
+          ref={picker}
+          type="file"
+          accept="video/*"
+          multiple
+          hidden
+          onChange={async (e) => {
+            await send([...(e.target.files ?? [])]);
+            e.target.value = "";
+          }}
+        />
       </div>
       <div className="chips">
         {recent.map((v) => (

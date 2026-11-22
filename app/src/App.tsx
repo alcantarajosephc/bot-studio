@@ -67,9 +67,14 @@ export function App() {
         </div>
         <nav className="tabs">
           {TABS.map((t) => (
-            <button key={t.id} className={`tab ${tab === t.id ? "active" : ""}`} onClick={() => setTab(t.id)}>
+            <button
+              key={t.id}
+              className={`tab ${tab === t.id ? "active" : ""}`}
+              onClick={() => setTab(t.id)}
+              title={t.id === "settings" && missingKeys ? "API keys missing" : undefined}
+            >
               {t.label}
-              {t.id === "settings" && missingKeys ? <span className="dot-warn" title="API keys missing" /> : null}
+              {t.id === "settings" && missingKeys ? <span className="dot-warn" aria-hidden /> : null}
             </button>
           ))}
         </nav>

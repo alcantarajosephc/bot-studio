@@ -191,4 +191,5 @@ export type ServerEvent =
   | { type: "video.removed"; id: string }
   | { type: "project"; project: EditorProject }
   | { type: "project.removed"; id: string }
-  | { type: "settings"; settings: PublicSettings };
+  | { type: "settings"; settings: PublicSettings }
+  | { type: "training"; training: { name: string; chars: number }[] };

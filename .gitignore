@@ -7,3 +7,7 @@ data/
 /*.mp4
 /*.mov
 data-demo/
+# Playwright
+test-results/
+playwright-report/
+e2e/.fixtures/
