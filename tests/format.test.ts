@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { fromLocalInput, toLocalInput, fmtSlot } from "../app/src/lib/format.ts";
-import { fmtTime, parseTime } from "../shared/format.ts";
+import { fmtBytes, fmtTime, parseTime } from "../shared/format.ts";
 import { parseNotes } from "../server/bots/editor/plan.ts";
 
 describe("time zone helpers", () => {
@@ -30,5 +30,27 @@ describe("timestamps", () => {
     expect(n[0]).toEqual({ time: 110.7, stamp: "1:50.7", text: "zoom in on the product" });
     expect(n[1].time).toBeCloseTo(92.9);
     expect(n[2]).toEqual({ time: null, stamp: "", text: "make it punchier" });
+  });
+});
+
+describe("byte sizes", () => {
+  it("formats the ticket's examples", () => {
+    expect(fmtBytes(512)).toBe("512 B");
+    expect(fmtBytes(1536)).toBe("1.5 KB");
+    expect(fmtBytes(5242880)).toBe("5 MB");
+    expect(fmtBytes(1073741824)).toBe("1 GB");
+  });
+  it("uses 1024-based unit boundaries", () => {
+    expect(fmtBytes(1024)).toBe("1 KB");
+    expect(fmtBytes(1048576)).toBe("1 MB");
+  });
+  it("rounds to at most one decimal", () => {
+    expect(fmtBytes(1587)).toBe("1.5 KB");
+  });
+  it("returns '0 B' for negative or non-finite input", () => {
+    expect(fmtBytes(-1)).toBe("0 B");
+    expect(fmtBytes(NaN)).toBe("0 B");
+    expect(fmtBytes(Infinity)).toBe("0 B");
+    expect(fmtBytes(-Infinity)).toBe("0 B");
   });
 });

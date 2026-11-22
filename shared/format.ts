@@ -14,3 +14,17 @@ export function parseTime(text: string): number | null {
   if (!m) return null;
   return (m[1] ? Number(m[1]) * 60 : 0) + Number(m[2]);
 }
+
+/** 512 -> "512 B", 1536 -> "1.5 KB", 5242880 -> "5 MB". 1024-based, capped at GB. */
+export function fmtBytes(n: number): string {
+  if (!Number.isFinite(n) || n < 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  let value = n;
+  let i = 0;
+  while (value >= 1024 && i < units.length - 1) {
+    value /= 1024;
+    i++;
+  }
+  const num = String(Math.round(value * 10) / 10);
+  return `${num} ${units[i]}`;
+}
