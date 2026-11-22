@@ -73,7 +73,7 @@ All tests use fake AI providers, so they run free and need no keys.
 
 | Command | What runs |
 |---|---|
-| `npm test` | Vitest, 46 tests: thumbnail scoring, caption prompts, scheduler rules, the timeline compiler, the full pipeline over HTTP, and a real Remotion render of a first version and a revised one |
+| `npm test` | Vitest, 50 tests: thumbnail scoring, caption prompts, scheduler rules, format helpers, the timeline compiler, the full pipeline over HTTP, and a real Remotion render of a first version and a revised one |
 | `npm run test:e2e` | Playwright, 28 tests in a real Chromium: every page and panel, uploading and dropping videos, Run everything and Running, caption rules and style training, scheduler changes, the office canvas, the editor → Review → revise loop, and keys never reaching the browser |
 | `npm run test:all` | Typecheck, then both of the above |
 
