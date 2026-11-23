@@ -49,11 +49,24 @@ Each bot is its own worker with its own queue, status and log, so different bots
 | Bot | What it does | AI? |
 |---|---|---|
 | Thumbnail | Samples up to 40 frames, scores sharpness and exposure, keeps the best | No (ffmpeg) |
-| SEO Caption | Transcribes (local Whisper or Groq), then the writing model writes the caption from your rules and style examples | Yes |
+| SEO Caption | Transcribes (local Whisper or Groq), then the writing model writes the caption from your rules and style examples. An advisory **Caption health** check then flags shadowban-risk words, links, ALL-CAPS runs, duplicate/overused hashtags and over-length captions | Writing: yes · health check: no |
 | Scheduler | Day presets, auto spread (under 10 videos share one day, 10+ spread out, up to 100 a day) or fixed times (up to 20 a day), per-video times, reorder, time zone | No |
 | Posting | Reports what's waiting. No platform connected | No |
 | Video Editor | Transcribes and finds pauses, Claude plans the edit by word index, code compiles exact cuts, Remotion renders 1080x1920 | Yes |
 | Review | Timestamped notes are mapped back to source words, Claude revises the plan, the editor renders the next version | Yes |
+
+### Caption health
+
+Every caption gets a local, no-AI lint pass before it goes out — the one reassurance creators usually buy a standalone "shadowban checker" for. It flags, as **guidance** (never a block on saving, editing or scheduling):
+
+- risk / strong-language words (seeded with an English + Taglish/Tagalog starter list)
+- a URL in the caption body or "link in bio" wording
+- ALL-CAPS runs (a shouted word of 5+ letters; normal acronyms like `LOL` are fine)
+- duplicate or overused / banned-generic hashtags
+- a hashtag count outside your caption rule
+- a caption over the selected platform's hard limit (TikTok / Instagram / YouTube)
+
+A compact **Caption health** chip shows on each caption row, in the caption editor (re-checking your live edits) and on the Videos and Posting rows: green when clean, amber with a count of possible reach risks otherwise. Expanding it names the exact offending token and gives a one-line reason it hurts reach. The risk-word list, banned-hashtag list and active platform limit are all editable in the caption bot's **My rules** card — no code changes — and the copy frames results as hints, not a guarantee.
 
 ## Customizing
 
@@ -66,6 +79,7 @@ Each bot is its own worker with its own queue, status and log, so different bots
 | Switch caption/edit model (e.g. Groq) | Keys & models page, or add a provider in `server/providers/llm/` |
 | Switch speech-to-text | `server/providers/transcribe.ts` (Groq and local Whisper included) |
 | Caption instructions | `prompts/caption.md` |
+| Caption health risk words, banned hashtags, platform length limit | Caption bot **My rules** card (seeded in `server/config.ts`; rules in `shared/caption-health.ts`) |
 | Editing instructions | `prompts/edit-plan.md`, `prompts/edit-revise.md` |
 | Video look (fonts, colors, caption size and position) | `editor-remotion/theme.ts`, `editor-remotion/EditVideo.tsx` |
 | Cut rules (padding, caption length) | constants at the top of `server/bots/editor/compile.ts` |
@@ -84,7 +98,7 @@ All tests use fake AI providers, so they run free and need no keys.
 
 | Command | What runs |
 |---|---|
-| `npm test` | Vitest, 64 tests: thumbnail scoring, caption prompts, scheduler rules, format helpers, the timeline compiler, the Claude Code CLI provider (with a fake `claude` command), the settings allowlist, the full pipeline over HTTP, and a real Remotion render of a first version and a revised one |
+| `npm test` | Vitest, 80 tests: thumbnail scoring, caption prompts, the caption health linter (every rule plus editable-list and garbage-input guards), scheduler rules, format helpers, the timeline compiler, the Claude Code CLI provider (with a fake `claude` command), the settings allowlist, the full pipeline over HTTP, and a real Remotion render of a first version and a revised one |
 | `npm run test:e2e` | Playwright, 31 tests in a real Chromium: every page and panel, uploading and dropping videos, Run everything and Running, caption rules and style training, scheduler changes, the keyless Claude Code default and switching to API keys, the office canvas (including a live hand-off reel and the batch celebration), the editor → Review → revise loop, and keys never reaching the browser |
 | `npm run test:all` | Typecheck, then both of the above |
 
