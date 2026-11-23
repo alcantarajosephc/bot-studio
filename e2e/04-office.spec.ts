@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { drawer } from "./helpers";
+import { clickNode, closeDrawer, drawer, fixture } from "./helpers";
 
 test("the office draws the room and every bot", async ({ page }) => {
   await page.goto("/#office");
@@ -46,4 +46,30 @@ test("clicking a bot in the legend or on the canvas opens its panel", async ({ p
   });
   await page.mouse.click(box.x + hit.x, box.y + hit.y);
   await expect(drawer(page)).toContainText("Posting Bot");
+});
+
+test("a hand-off reel and the batch celebration actually draw", async ({ page }) => {
+  // Pause so the new video waits while we get the office on screen, then run it
+  // with the office mounted so the hand-off + celebration animate where we can see them.
+  await page.goto("/");
+  await (await page.request.post("/api/running", { data: { running: false } })).json();
+
+  await clickNode(page, "drop");
+  await drawer(page).locator('input[type="file"]').setInputFiles(fixture("sample.mp4"));
+  await expect(drawer(page)).toContainText("Added 1 video.");
+  await closeDrawer(page);
+
+  await page.goto("/#office");
+  const canvas = page.locator(".office > canvas");
+  await expect(canvas).toBeVisible();
+  // Let the animation loop record a baseline (bots start idle) before work begins.
+  await page.waitForTimeout(400);
+
+  // Start a real batch: the new video advances through the bots, which drives the
+  // hand-off reels, and the scheduled counter ticks up, which fires the celebration.
+  await page.request.post("/api/run");
+
+  const fx = (attr: string) => canvas.evaluate((c: HTMLCanvasElement, a: string) => Number(c.dataset[a] ?? 0), attr);
+  await expect.poll(() => fx("fxHandoffs"), { timeout: 45_000 }).toBeGreaterThan(0);
+  await expect.poll(() => fx("fxCelebrations"), { timeout: 45_000 }).toBeGreaterThan(0);
 });

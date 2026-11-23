@@ -39,6 +39,66 @@ const LOUNGE = [
   { x: 5.2, y: 4.2, what: "chat" },
 ];
 
+// Work moves along two lanes. A hand-off reel flies from one desk to the next
+// when a lane bot starts working (the signal a video advancing a stage produces).
+const POSTING_LANE = ["thumbnail", "caption", "scheduler", "posting"];
+const EDITING_LANE = ["editor", "revision"];
+const CONFETTI_COLORS = ["#3cc78a", "#ffd21f", "#e0457b", "#4bb3dd", "#7a4de0"];
+
+/** A film-reel hand-off arcing from one desk to another. */
+interface Reel {
+  fx: number;
+  fy: number;
+  tx: number;
+  ty: number;
+  start: number;
+  dur: number;
+}
+
+interface Confetti {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  rot: number;
+  vr: number;
+  w: number;
+  h: number;
+  color: string;
+  born: number;
+}
+
+/** Screen point for the monitor of a desk, where hand-off reels fly from/to. */
+function deskPoint(d: { x: number; y: number }) {
+  const p = iso(d.x + 1, d.y + 0.5);
+  return { x: p.x, y: p.y - 10 };
+}
+
+/** A small film reel: dark hub with an amber centre and sprocket holes. */
+function drawReel(g: G, x: number, y: number, scale: number, alpha: number) {
+  g.globalAlpha = Math.max(0, Math.min(1, alpha));
+  g.fillStyle = "#2a2d3a";
+  g.beginPath();
+  g.ellipse(x, y, 4 * scale, 4 * scale, 0, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = "#1b1d26";
+  g.lineWidth = 0.6;
+  g.strokeStyle = "#1b1d26";
+  g.stroke();
+  g.fillStyle = "#ffd21f";
+  g.beginPath();
+  g.ellipse(x, y, 1.4 * scale, 1.4 * scale, 0, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = "#f3a712";
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2;
+    g.beginPath();
+    g.ellipse(x + Math.cos(a) * 2.6 * scale, y + Math.sin(a) * 2.6 * scale, 0.7 * scale, 0.7 * scale, 0, 0, Math.PI * 2);
+    g.fill();
+  }
+  g.globalAlpha = 1;
+}
+
 interface Walker {
   id: string;
   x: number;
@@ -86,11 +146,18 @@ function drawRoom(g: G, now: Date, scheduled: number) {
   poly(g, [o, yl, up(yl, WALL), up(o, WALL)], "#283669");
   poly(g, [up(o, WALL), up(xr, WALL), up(xr, WALL + 3), up(o, WALL + 3)], "#5468b0");
   poly(g, [up(o, WALL), up(yl, WALL), up(yl, WALL + 3), up(o, WALL + 3)], "#4a5ca0");
-  // windows on the right wall
+  // windows on the right wall, tinted by the local time of day
+  const hour = now.getHours();
+  const win =
+    hour >= 20 || hour < 6
+      ? { glass: "#243b6b", hi: "#3a5ca0" } // night
+      : hour >= 17
+        ? { glass: "#f3934a", hi: "#ffc085" } // sunset
+        : { glass: "#9fd3ff", hi: "#cfeaff" }; // day
   for (const wx of [2.2, 5.2]) {
     const p = iso(wx, 0), q = iso(wx + 2, 0);
-    poly(g, [up(p, 12), up(q, 12), up(q, 34), up(p, 34)], "#9fd3ff");
-    poly(g, [up(p, 12), up(q, 12), up(q, 15), up(p, 15)], "#cfeaff");
+    poly(g, [up(p, 12), up(q, 12), up(q, 34), up(p, 34)], win.glass);
+    poly(g, [up(p, 12), up(q, 12), up(q, 15), up(p, 15)], win.hi);
     g.strokeStyle = "#30407a";
     g.lineWidth = 1;
     const m = iso(wx + 1, 0);
@@ -161,41 +228,73 @@ interface Prop {
   draw: (g: G) => void;
 }
 
-function deskProps(working: Record<string, boolean>, deskOf: Record<string, { x: number; y: number }>): Prop[] {
+function deskProps(working: Record<string, boolean>, deskOf: Record<string, { x: number; y: number }>, t: number, reduce: boolean): Prop[] {
+  const greens = ["#3cc78a", "#4fe0a0", "#34b87e"];
   const props: Prop[] = [];
   for (const [id, d] of Object.entries(deskOf)) {
     props.push({
       depth: d.x + d.y + 1.5,
       draw: (g) => {
         box(g, d.x, d.y, 2, 0.9, 9, "#b07a52", "#7d5236", "#93623f");
-        // monitor
+        // monitor: a working screen glows green and subtly flickers between frames
         const on = working[id];
-        box(g, d.x + 0.55, d.y + 0.1, 0.9, 0.18, 10, "#1b1d26", on ? "#3cc78a" : "#2a2d3a", "#14161d");
+        const face = on ? (reduce ? greens[0] : greens[Math.floor(t / 120 + d.x * 3) % 3]) : "#2a2d3a";
+        box(g, d.x + 0.55, d.y + 0.1, 0.9, 0.18, 10, "#1b1d26", face, "#14161d");
         // keyboard
         const k = iso(d.x + 1, d.y + 0.65);
         g.fillStyle = "#e8e9ee";
         g.fillRect(k.x - 3, k.y - 9.5, 6, 1.2);
+        // typing sparkles twinkle over the keyboard of a working bot
+        if (on) {
+          for (let i = 0; i < 3; i++) {
+            if (reduce && i > 0) break;
+            const tw = (Math.sin(t / 180 + i * 2.1 + d.x) + 1) / 2;
+            g.globalAlpha = reduce ? 0.85 : tw;
+            g.fillStyle = i % 2 ? "#ffd21f" : "#8fd8ff";
+            g.fillRect(k.x - 3 + i * 3, k.y - 13 - tw * 3, 1, 1);
+          }
+          g.globalAlpha = 1;
+        }
       },
     });
   }
   return props;
 }
 
-function loungeProps(): Prop[] {
+function loungeProps(occ: { coffee: boolean; arcade: boolean }, t: number, reduce: boolean): Prop[] {
   return [
-    // coffee machine + counter
-    { depth: 11 + 5.4 + 1, draw: (g) => { box(g, 11, 5.4, 1, 1, 12, "#9aa3b5", "#5c6478", "#737c91"); box(g, 11.25, 5.5, 0.5, 0.35, 6, "#1b1d26", "#2a2d3a", "#3cc78a"); } },
+    // coffee machine + counter, with steam rising when a bot is standing there
+    {
+      depth: 11 + 5.4 + 1,
+      draw: (g) => {
+        box(g, 11, 5.4, 1, 1, 12, "#9aa3b5", "#5c6478", "#737c91");
+        box(g, 11.25, 5.5, 0.5, 0.35, 6, "#1b1d26", "#2a2d3a", "#3cc78a");
+        if (occ.coffee) {
+          const base = iso(11.5, 5.9);
+          for (let i = 0; i < 3; i++) {
+            const rise = reduce ? 8 + i * 4 : (t / 14 + i * 9) % 16;
+            g.globalAlpha = 0.5 * (1 - rise / 16);
+            g.fillStyle = "#e8e9ee";
+            g.beginPath();
+            g.ellipse(base.x + (reduce ? 0 : Math.sin(t / 300 + i) * 2), base.y - 15 - rise, 1.6, 2.2, 0, 0, Math.PI * 2);
+            g.fill();
+          }
+          g.globalAlpha = 1;
+        }
+      },
+    },
     // sofa: seat + back
     { depth: 8.4 + 9.4 + 1, draw: (g) => { box(g, 8.3, 9.3, 2.6, 0.7, 6, "#f58a3a", "#b85f20", "#d4732b"); box(g, 8.3, 9.75, 2.6, 0.25, 12, "#f9a463", "#b85f20", "#d4732b"); } },
     // coffee table
     { depth: 9 + 8 + 0.5, draw: (g) => box(g, 9, 7.9, 1.4, 0.7, 4, "#f3f4f8", "#a9b0c4", "#c9cfdd") },
-    // arcade cabinet
+    // arcade cabinet: screen flashes faster while someone plays
     {
       depth: 11.2 + 8.2 + 1,
       draw: (g) => {
         box(g, 11.2, 8.2, 0.8, 0.8, 24, "#7a4de0", "#4a2aa0", "#5e36c4");
         const s = iso(11.2, 8.6);
-        g.fillStyle = (Math.floor(performance.now() / 300) % 2) ? "#5ef2c2" : "#ffd21f";
+        const interval = occ.arcade ? 120 : 300;
+        g.fillStyle = (Math.floor(performance.now() / interval) % 2) ? "#5ef2c2" : "#ffd21f";
         g.fillRect(s.x - 4, s.y - 19, 5, 4);
       },
     },
@@ -245,6 +344,18 @@ export function OfficeView({ live, onOpenBot }: { live: LiveState; onOpenBot: (i
     const g = c.getContext("2d")!;
     let raf = 0;
     let last = performance.now();
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+
+    // State kept across frames, used to turn existing live signals into animations.
+    const prevStatus: Record<string, string> = {};
+    const errorSince: Record<string, number> = {};
+    let prevScheduled = -1;
+    let hopUntil = 0;
+    let reels: Reel[] = [];
+    let confetti: Confetti[] = [];
+    // Monotonic draw counters mirrored onto the canvas so e2e can see effects render.
+    let fxHandoffs = 0;
+    let fxCelebrations = 0;
 
     const tick = (t: number) => {
       const dt = Math.min(0.05, (t - last) / 1000);
@@ -253,6 +364,41 @@ export function OfficeView({ live, onOpenBot }: { live: LiveState; onOpenBot: (i
       const metas = L.metas;
       const deskOf: Record<string, { x: number; y: number }> = {};
       metas.forEach((m) => (deskOf[m.id] = DESKS[m.id] ?? SPARE_DESK));
+      const deskFor = (id: string) => deskOf[id] ?? DESKS[id] ?? SPARE_DESK;
+
+      // Hand-offs: a lane bot starting work means a video just advanced to it.
+      const statusNow: Record<string, string> = {};
+      for (const m of metas) statusNow[m.id] = L.bots[m.id]?.status ?? "idle";
+      const spawnReel = (fromId: string, toId: string) => {
+        const f = deskPoint(deskFor(fromId)), d = deskPoint(deskFor(toId));
+        reels.push({ fx: f.x, fy: f.y, tx: d.x, ty: d.y, start: t, dur: 700 });
+      };
+      const became = (id: string) => statusNow[id] === "working" && prevStatus[id] && prevStatus[id] !== "working";
+      for (let i = 1; i < POSTING_LANE.length; i++) if (became(POSTING_LANE[i])) spawnReel(POSTING_LANE[i - 1], POSTING_LANE[i]);
+      if (became(EDITING_LANE[0])) spawnReel(EDITING_LANE[1], EDITING_LANE[0]);
+      if (became(EDITING_LANE[1])) spawnReel(EDITING_LANE[0], EDITING_LANE[1]);
+      for (const id in statusNow) prevStatus[id] = statusNow[id];
+
+      // Celebration: the whiteboard counter ticking up is a finished batch.
+      const scheduled = L.videos.filter((v) => v.stage === "scheduled").length;
+      if (prevScheduled >= 0 && scheduled > prevScheduled) {
+        hopUntil = t + 1200;
+        for (let i = 0; i < 40; i++) {
+          confetti.push({
+            x: Math.random() * W,
+            y: -4 - Math.random() * 18,
+            vx: (Math.random() - 0.5) * 30,
+            vy: 80 + Math.random() * 90,
+            rot: Math.random() * Math.PI,
+            vr: (Math.random() - 0.5) * 8,
+            w: 2 + Math.random() * 2,
+            h: 3 + Math.random() * 3,
+            color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
+            born: t,
+          });
+        }
+      }
+      prevScheduled = scheduled;
 
       // update walkers
       for (const m of metas) {
@@ -288,21 +434,33 @@ export function OfficeView({ live, onOpenBot }: { live: LiveState; onOpenBot: (i
         }
       }
 
+      // Who is hanging around the lounge spots, so steam / arcade flash react.
+      const occ = { coffee: false, arcade: false };
+      for (const w of Object.values(walkers.current)) {
+        for (const spot of LOUNGE) {
+          if (Math.hypot(w.x - spot.x, w.y - spot.y) < 0.7) {
+            if (spot.what === "coffee") occ.coffee = true;
+            if (spot.what === "arcade") occ.arcade = true;
+          }
+        }
+      }
+
       // draw art layer at low res
       g.setTransform(S, 0, 0, S, 0, 0);
       g.imageSmoothingEnabled = false;
-      const scheduled = L.videos.filter((v) => v.stage === "scheduled").length;
       drawRoom(g, new Date(), scheduled);
       const working = Object.fromEntries(metas.map((m) => [m.id, L.bots[m.id]?.status === "working"]));
-      const props: Prop[] = [...deskProps(working, deskOf), ...loungeProps()];
+      const props: Prop[] = [...deskProps(working, deskOf, t, reduce), ...loungeProps(occ, t, reduce)];
       const botProps: (Prop & { id: string; sx: number; sy: number })[] = [];
+      // On a batch celebration every bot hops with a brief extra bounce.
+      const hop = !reduce && t < hopUntil ? Math.abs(Math.sin((hopUntil - t) / 90)) * 3 : 0;
       for (const m of metas) {
         const w = walkers.current[m.id];
         if (!w) continue;
         const st = L.bots[m.id]?.status ?? "idle";
         const p = iso(w.x, w.y);
         const moving = Math.hypot(w.tx - w.x, w.ty - w.y) > 0.01;
-        const bobY = moving ? (Math.floor(t / 140 + w.phase) % 2) : st === "working" ? (Math.floor(t / 220 + w.phase) % 2) * 0.6 : 0;
+        const bobY = hop + (moving ? (Math.floor(t / 140 + w.phase) % 2) : st === "working" ? (Math.floor(t / 220 + w.phase) % 2) * 0.6 : 0);
         const blink = st === "idle" && Math.floor(t / 100 + w.phase * 37) % 45 === 0;
         const face: Face = blink ? "blink" : faceFor(st);
         const sx = p.x - 8, sy = p.y - 17 - bobY;
@@ -321,6 +479,42 @@ export function OfficeView({ live, onOpenBot }: { live: LiveState; onOpenBot: (i
         });
       }
       [...props, ...botProps].sort((a, b) => a.depth - b.depth).forEach((pr) => pr.draw(g));
+
+      // hand-off reels arc over the desks (reduced motion shows a settled mid-arc frame)
+      reels = reels.filter((r) => t - r.start < r.dur);
+      let drewReel = false;
+      for (const r of reels) {
+        const p = reduce ? 0.5 : (t - r.start) / r.dur;
+        const x = r.fx + (r.tx - r.fx) * p;
+        const y = r.fy + (r.ty - r.fy) * p - Math.sin(Math.PI * p) * 26;
+        const scale = 0.7 + Math.sin(Math.PI * p) * 0.8;
+        const alpha = reduce ? 1 : p > 0.85 ? (1 - p) / 0.15 : 1;
+        drawReel(g, x, y, scale, alpha);
+        drewReel = true;
+      }
+      if (drewReel) c.dataset.fxHandoffs = String(++fxHandoffs);
+
+      // confetti falls over the whole room on a celebration
+      confetti = confetti.filter((cf) => t - cf.born < 1200);
+      let drewConfetti = false;
+      for (const cf of confetti) {
+        if (!reduce) {
+          cf.x += cf.vx * dt;
+          cf.y += cf.vy * dt;
+          cf.rot += cf.vr * dt;
+        }
+        const age = (t - cf.born) / 1200;
+        g.save();
+        g.globalAlpha = 1 - age * age;
+        g.translate(cf.x, cf.y);
+        g.rotate(cf.rot);
+        g.fillStyle = cf.color;
+        g.fillRect(-cf.w / 2, -cf.h / 2, cf.w, cf.h);
+        g.restore();
+        drewConfetti = true;
+      }
+      g.globalAlpha = 1;
+      if (drewConfetti) c.dataset.fxCelebrations = String(++fxCelebrations);
 
       // text layer at full res
       g.setTransform(1, 0, 0, 1, 0, 0);
@@ -362,6 +556,43 @@ export function OfficeView({ live, onOpenBot }: { live: LiveState; onOpenBot: (i
         } else if (w && t < w.sayUntil && w.say) {
           bubble(g, cx, top - 6, w.say, "idle");
         }
+        // 'z z z' rises over a bot settled on a sofa
+        const dozing = w && Math.hypot(w.tx - w.x, w.ty - w.y) < 0.05 && LOUNGE.some((s) => s.what === "sofa" && Math.hypot(w.x - s.x, w.y - s.y) < 0.7);
+        if (dozing && st !== "error" && st !== "off") {
+          const rise = reduce ? 6 : (t / 18) % 16;
+          g.font = "800 13px Inter, sans-serif";
+          g.textAlign = "center";
+          g.textBaseline = "alphabetic";
+          g.lineWidth = 3;
+          g.strokeStyle = "#1b1d26";
+          g.strokeText("z z z", cx + 10, top - 4 - rise);
+          g.fillStyle = "#cfe4ff";
+          g.fillText("z z z", cx + 10, top - 4 - rise);
+        }
+        // a red '!' pops over a bot in error (clears when the error ends)
+        if (st === "error") {
+          const since = errorSince[bp.id] ?? (errorSince[bp.id] = t);
+          const prog = Math.min(1, (t - since) / 180);
+          const scale = reduce ? 1 : prog < 0.7 ? (prog / 0.7) * 1.15 : 1.15 - ((prog - 0.7) / 0.3) * 0.15;
+          g.save();
+          g.translate(cx, top - 34);
+          g.scale(scale, scale);
+          g.fillStyle = "#e0303a";
+          g.strokeStyle = "#1b1d26";
+          g.lineWidth = 2;
+          g.beginPath();
+          g.ellipse(0, 0, 10, 10, 0, 0, Math.PI * 2);
+          g.fill();
+          g.stroke();
+          g.fillStyle = "#fff";
+          g.font = "900 15px Inter, sans-serif";
+          g.textAlign = "center";
+          g.textBaseline = "middle";
+          g.fillText("!", 0, 1);
+          g.restore();
+        } else {
+          delete errorSince[bp.id];
+        }
       }
       raf = requestAnimationFrame(tick);
     };
@@ -380,8 +611,16 @@ export function OfficeView({ live, onOpenBot }: { live: LiveState; onOpenBot: (i
 
   return (
     <div className="office">
-      <div className="office-title">{APP_NAME} office · busy bots stay at their desks, free ones wander the room</div>
-      <canvas ref={canvas} width={W * S} height={H * S} onClick={onClick} style={{ width: W * S, cursor: "pointer" }} />
+      <div className="office-title">{APP_NAME} office · busy bots stay at their desks, free ones wander the room · watch work hand off between desks</div>
+      <canvas
+        ref={canvas}
+        width={W * S}
+        height={H * S}
+        onClick={onClick}
+        role="img"
+        aria-label="Animated office: bots hand off work between desks, celebrate finished batches, and flag errors"
+        style={{ width: W * S, cursor: "pointer" }}
+      />
       <div className="office-legend">
         {live.metas.map((m) => (
           <span key={m.id} className="who" onClick={() => onOpenBot(m.id)}>
