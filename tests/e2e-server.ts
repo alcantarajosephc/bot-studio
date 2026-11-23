@@ -62,6 +62,21 @@ const llm: LlmProvider = {
         titleCards: [],
       });
     }
+    // The caption schema is widened per selected platform (default: all four). The fallback
+    // single-caption shape is still returned when no platforms are selected.
+    const shape = (opts.schema as unknown as { shape?: Record<string, unknown> }).shape;
+    if (shape && "variants" in shape) {
+      const hashtags = ["tips", "beginners"];
+      return opts.schema.parse({
+        keywords: ["quick tips", "beginner tips"],
+        variants: {
+          youtube: { title: "Three quick tips for beginners", description: "", hashtags },
+          tiktok: { caption: "Three quick tips for beginners", hashtags },
+          instagram: { caption: "Three quick tips for beginners", hashtags },
+          facebook: { caption: "Three quick tips for beginners", hashtags },
+        },
+      });
+    }
     return opts.schema.parse({ caption: "Three quick tips for beginners", keywords: ["quick tips", "beginner tips"], hashtags: ["tips", "beginners"] });
   },
 };

@@ -76,7 +76,7 @@ export interface VideoRecord {
   duration?: number;
   thumbnail?: { file: string; time: number; reason: string };
   transcript?: Transcript;
-  caption?: { text: string; caption: string; keywords: string[]; hashtags: string[]; language: string };
+  caption?: { text: string; caption: string; keywords: string[]; hashtags: string[]; language: string; variants?: CaptionVariant[] };
   schedule?: { at: string; manual: boolean };
   error?: string;
 }
@@ -90,6 +90,23 @@ export interface CaptionRules {
   hashtagCount: number;
   maxLength: number;
   notes: string;
+  /** Platform ids the bot writes a tailored variant for (see shared/platforms.ts). Empty/invalid falls back to one generic caption. */
+  platforms: string[];
+}
+
+/** One platform-tailored caption produced in a single caption run. */
+export interface CaptionVariant {
+  /** Platform id, e.g. "youtube" | "tiktok" | "instagram" | "facebook". */
+  platform: string;
+  /** Human label, e.g. "YouTube Shorts". */
+  label: string;
+  /** YouTube Shorts: the search title. */
+  title?: string;
+  /** YouTube Shorts: the description. */
+  description?: string;
+  /** TikTok / Reels: the short hook-led caption. */
+  caption?: string;
+  hashtags: string[];
 }
 
 export type DayPreset = "every" | "weekdays" | "mwf" | "custom";

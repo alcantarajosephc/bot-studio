@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { CaptionRules, PublicSettings, ScheduleSettings, VideoRecord } from "../../../shared/types";
+import { CAPTION_PLATFORMS, normalizeHashtags, platformCopyText } from "../../../shared/platforms";
 import type { LiveState } from "../lib/live";
 import { api, uploadVideos } from "../lib/api";
 import { Sprite } from "../components/Sprite";
@@ -211,6 +212,30 @@ function CaptionPanel({ live }: { live: LiveState }) {
               ))}
             </div>
           </div>
+          <div className="row">
+            <span className="hint" style={{ width: 90 }}>Post to</span>
+            <div className="toggle-group" role="group" aria-label="Post to">
+              {CAPTION_PLATFORMS.map((p) => {
+                const on = (draft.platforms ?? []).includes(p.id);
+                return (
+                  <button
+                    key={p.id}
+                    className={`daybtn ${on ? "on" : ""}`}
+                    aria-pressed={on}
+                    onClick={() => {
+                      const cur = draft.platforms ?? [];
+                      const next = on ? cur.filter((x) => x !== p.id) : [...cur, p.id];
+                      // At least one platform must stay on; re-enable the one just tapped if it would empty the set.
+                      set({ platforms: next.length ? next : [p.id] });
+                    }}
+                  >
+                    {p.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <p className="help" style={{ margin: 0 }}>The bot writes a tailored version for each platform you pick. Fewer platforms means fewer tokens per caption.</p>
           <div className="grid2">
             <label className="field">
               Keywords per caption
@@ -285,8 +310,81 @@ function CaptionPanel({ live }: { live: LiveState }) {
 function CaptionEditor({ v, live }: { v: VideoRecord; live: LiveState }) {
   const [text, setText] = useState(v.caption!.text);
   useEffect(() => setText(v.caption!.text), [v.caption!.text]); // eslint-disable-line react-hooks/exhaustive-deps
+  const rules = live.settings?.captionRules;
+  const variants = v.caption!.variants ?? [];
+  // Tabs in canonical order, filtered to the variants actually generated.
+  const tabs = CAPTION_PLATFORMS.filter((p) => variants.some((vr) => vr.platform === p.id));
+  const [active, setActive] = useState(0);
+  const [copied, setCopied] = useState("");
+  const idx = Math.min(active, Math.max(tabs.length - 1, 0));
+  const activeTab = tabs[idx];
+  const variant = activeTab ? variants.find((vr) => vr.platform === activeTab.id) : undefined;
+
+  const copy = async () => {
+    if (!variant || !rules) return;
+    try {
+      await navigator.clipboard.writeText(platformCopyText(variant, rules));
+      setCopied(variant.platform);
+      setTimeout(() => setCopied(""), 1500);
+    } catch {
+      // Clipboard can reject outside a secure/gesture context; ignore so it never throws.
+    }
+  };
+
+  const showTags = Boolean(rules?.hashtags) && (variant?.hashtags.length ?? 0) > 0;
+
   return (
     <VideoRow v={v} live={live}>
+      {tabs.length > 0 && activeTab ? (
+        <div style={{ marginTop: 6 }}>
+          <div className="toggle-group" role="tablist" aria-label="Platform variants">
+            {tabs.map((p, i) => (
+              <button
+                key={p.id}
+                role="tab"
+                id={`tab-${v.id}-${p.id}`}
+                aria-selected={i === idx}
+                aria-controls={`panel-${v.id}-${p.id}`}
+                tabIndex={i === idx ? 0 : -1}
+                className={i === idx ? "on" : ""}
+                onClick={() => setActive(i)}
+                onKeyDown={(e) => {
+                  if (e.key === "ArrowRight") setActive((idx + 1) % tabs.length);
+                  else if (e.key === "ArrowLeft") setActive((idx - 1 + tabs.length) % tabs.length);
+                }}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          {variant ? (
+            <div role="tabpanel" id={`panel-${v.id}-${activeTab.id}`} aria-labelledby={`tab-${v.id}-${activeTab.id}`} style={{ marginTop: 6 }}>
+              {activeTab.kind === "title-desc" ? (
+                <>
+                  <div className="hint">Title</div>
+                  <div className="caption">{variant.title}</div>
+                  <div className="hint" style={{ marginTop: 4 }}>Description</div>
+                  <div className="caption" style={{ whiteSpace: "pre-wrap" }}>{variant.description}</div>
+                </>
+              ) : (
+                <div className="caption" style={{ whiteSpace: "pre-wrap" }}>{variant.caption}</div>
+              )}
+              {showTags ? (
+                <div className="chips" style={{ marginTop: 4 }}>
+                  {variant.hashtags.map((h) => <span key={h} className="chip">{normalizeHashtags([h])}</span>)}
+                </div>
+              ) : null}
+              <div className="row" style={{ marginTop: 4 }}>
+                <button className="btn btn-sm" aria-label={`Copy ${activeTab.label} caption`} onClick={copy}>Copy for {activeTab.label}</button>
+                <span className="ok" role="status" aria-live="polite">{copied === variant.platform ? "Copied" : ""}</span>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <p className="hint" style={{ marginTop: 6 }}>This caption was written before platform variants. Re-run the video to get per-platform versions.</p>
+      )}
+
       <textarea className="input" style={{ marginTop: 6 }} value={text} onChange={(e) => setText(e.target.value)} />
       <div className="row" style={{ marginTop: 4 }}>
         <button className="btn btn-sm" disabled={text === v.caption!.text} onClick={() => api.patch(`/api/videos/${v.id}`, { captionText: text })}>Save caption</button>
