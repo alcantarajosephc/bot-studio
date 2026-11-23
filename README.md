@@ -1,6 +1,6 @@
 # Bot Studio
 
-A team of bots for short-form video. Add videos and they get a cover image, an SEO caption and a posting time. There's also a video editor that cuts and styles talking-head videos, and a Review tool for leaving timestamped notes that turn into the next version.
+A team of bots for short-form video. Add videos and they get a cover image, per-platform SEO captions and a posting time. There's also a video editor that cuts and styles talking-head videos, and a Review tool for leaving timestamped notes that turn into the next version.
 
 Posting to platforms isn't connected yet.
 
@@ -49,7 +49,7 @@ Each bot is its own worker with its own queue, status and log, so different bots
 | Bot | What it does | AI? |
 |---|---|---|
 | Thumbnail | Samples up to 40 frames, scores sharpness and exposure, keeps the best | No (ffmpeg) |
-| SEO Caption | Transcribes (local Whisper or Groq), then the writing model writes the caption from your rules and style examples | Yes |
+| SEO Caption | Transcribes (local Whisper or Groq), then the writing model writes per-platform caption variants (a YouTube Shorts title + description, short hook-led TikTok / Reels captions and a fitting hashtag set) from your rules and style examples, in one call | Yes |
 | Scheduler | Day presets, auto spread (under 10 videos share one day, 10+ spread out, up to 100 a day) or fixed times (up to 20 a day), per-video times, reorder, time zone | No |
 | Posting | Reports what's waiting. No platform connected | No |
 | Video Editor | Transcribes and finds pauses, Claude plans the edit by word index, code compiles exact cuts, Remotion renders 1080x1920 | Yes |
@@ -66,6 +66,8 @@ Each bot is its own worker with its own queue, status and log, so different bots
 | Switch caption/edit model (e.g. Groq) | Keys & models page, or add a provider in `server/providers/llm/` |
 | Switch speech-to-text | `server/providers/transcribe.ts` (Groq and local Whisper included) |
 | Caption instructions | `prompts/caption.md` |
+| Which platforms get caption variants | **Post to** control in the caption rules (Caption panel); defaults to all four |
+| Per-platform caption limits (title / description / caption caps) | `PLATFORM_LIMITS` constants in `shared/platforms.ts` |
 | Editing instructions | `prompts/edit-plan.md`, `prompts/edit-revise.md` |
 | Video look (fonts, colors, caption size and position) | `editor-remotion/theme.ts`, `editor-remotion/EditVideo.tsx` |
 | Cut rules (padding, caption length) | constants at the top of `server/bots/editor/compile.ts` |
@@ -84,7 +86,7 @@ All tests use fake AI providers, so they run free and need no keys.
 
 | Command | What runs |
 |---|---|
-| `npm test` | Vitest, 64 tests: thumbnail scoring, caption prompts, scheduler rules, format helpers, the timeline compiler, the Claude Code CLI provider (with a fake `claude` command), the settings allowlist, the full pipeline over HTTP, and a real Remotion render of a first version and a revised one |
+| `npm test` | Vitest, 73 tests: thumbnail scoring, caption prompts, scheduler rules, format helpers, the timeline compiler, the Claude Code CLI provider (with a fake `claude` command), the settings allowlist, the full pipeline over HTTP, and a real Remotion render of a first version and a revised one |
 | `npm run test:e2e` | Playwright, 31 tests in a real Chromium: every page and panel, uploading and dropping videos, Run everything and Running, caption rules and style training, scheduler changes, the keyless Claude Code default and switching to API keys, the office canvas (including a live hand-off reel and the batch celebration), the editor → Review → revise loop, and keys never reaching the browser |
 | `npm run test:all` | Typecheck, then both of the above |
 

@@ -44,6 +44,8 @@ export const DEFAULT_SETTINGS: Settings = {
     hashtagCount: 5,
     maxLength: 300,
     notes: "",
+    // All supported platforms by default, so upgraded installs produce every variant with zero config.
+    platforms: ["youtube", "tiktok", "instagram", "facebook"],
   },
   schedule: {
     days: "every",

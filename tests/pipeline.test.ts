@@ -11,7 +11,15 @@ let sys: BotSystem;
 let base: string;
 let server: Server;
 let videoFile: string;
-const llm = new FakeLlm(() => ({ caption: "How I grow on TikTok as a beginner", keywords: ["grow on tiktok", "tiktok tips"], hashtags: ["tiktoktips", "#contentcreator"] }));
+const llm = new FakeLlm(() => ({
+  keywords: ["grow on tiktok", "tiktok tips"],
+  variants: {
+    youtube: { title: "How I grow on TikTok as a beginner", description: "Beginner-friendly steps.", hashtags: ["tiktoktips", "#contentcreator"] },
+    tiktok: { caption: "How I grow on TikTok as a beginner", hashtags: ["tiktoktips", "#contentcreator"] },
+    instagram: { caption: "Grow on Reels as a beginner", hashtags: ["reels"] },
+    facebook: { caption: "Grow on FB Reels", hashtags: ["reels"] },
+  },
+}));
 const transcriber = new FakeTranscriber({ text: "today I will show you how to grow on tiktok", words: [] });
 
 beforeAll(async () => {
@@ -52,7 +60,11 @@ describe("bot pipeline", () => {
       expect(v.stage).toBe("scheduled");
       expect(v.thumbnail?.file).toBeTruthy();
       expect(fs.existsSync(path.join(process.env.BOTS_DATA_DIR!, "thumbs", v.thumbnail!.file))).toBe(true);
-      expect(v.caption?.text).toBe("How I grow on TikTok as a beginner\n\n#tiktoktips #contentcreator");
+      // Legacy fields stay populated from the primary (first selected = YouTube Shorts).
+      expect(v.caption?.text).toBe("How I grow on TikTok as a beginner\n\nBeginner-friendly steps.\n\n#tiktoktips #contentcreator");
+      expect(v.caption?.keywords).toEqual(["grow on tiktok", "tiktok tips"]);
+      // One variant per selected platform (default: all four), in canonical order.
+      expect(v.caption?.variants?.map((va) => va.platform)).toEqual(["youtube", "tiktok", "instagram", "facebook"]);
       expect(DateTime.fromISO(v.schedule!.at) > DateTime.now()).toBe(true);
     }
     // under 10 videos -> one day
@@ -62,9 +74,12 @@ describe("bot pipeline", () => {
     const times = videos.map((v) => v.schedule!.at);
     expect([...times].sort()).toEqual(times);
 
-    // The caption bot was given the transcript and the creator's rules.
+    // The caption bot was given the transcript and the creator's rules, and the prompt
+    // asks only for the selected platforms (default: all four) in one call.
     expect(llm.calls[0].prompt).toContain("grow on tiktok");
     expect(llm.calls[0].system).toMatch(/Taglish/);
+    expect(llm.calls[0].system).toContain("YouTube Shorts");
+    expect(llm.calls[0].system).toContain("TikTok");
 
     const state = await (await fetch(`${base}/api/state`)).json();
     const msgs: string[] = state.log.map((l: { bot: string; message: string }) => `${l.bot}: ${l.message}`);

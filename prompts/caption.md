@@ -11,4 +11,7 @@ How to work:
 Rules:
 {{RULES}}
 
+Output:
+{{PLATFORMS}}
+
 If the transcript is empty or unclear, write a short caption based on the file name and keep the keywords general rather than inventing details.
