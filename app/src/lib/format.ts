@@ -1,5 +1,10 @@
 export { fmtTime, parseTime } from "../../../shared/format";
 
+/** 12340 -> "12.3K". Compact figures for the best-times summary. */
+export function fmtCompact(n: number): string {
+  return new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(n);
+}
+
 export function fmtClock(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }

@@ -5,6 +5,7 @@ import multer from "multer";
 import type { BotSystem } from "./system.ts";
 import { loadBotMeta, paths, publicSettings, ROOT, updateSettings } from "./config.ts";
 import { deleteTraining, extractTrainingText, listTraining, saveTraining } from "./bots/caption.ts";
+import { parseResults } from "../shared/insights.ts";
 import { VIDEO_EXT } from "./bots/manager.ts";
 import { checkClaudeCode } from "./providers/llm/claude-code.ts";
 
@@ -79,6 +80,13 @@ export function createApp(sys: BotSystem) {
     if (req.body.schedule === null) patch.schedule = undefined;
     else if (req.body.schedule?.at) patch.schedule = { at: new Date(req.body.schedule.at).toISOString(), manual: true };
     if (patch.schedule && v.stage === "captioned") patch.stage = "scheduled";
+    // Results the creator types back in. null clears them; an object is validated
+    // and stored from the two whitelisted numbers only (never spread from the body).
+    if (req.body.results === null) patch.results = undefined;
+    else if (req.body.results !== undefined) {
+      const parsed = parseResults(req.body.results);
+      patch.results = { views: parsed.views, ...(parsed.likes !== undefined ? { likes: parsed.likes } : {}), capturedAt: new Date().toISOString() };
+    }
     res.json(ctx.store.updateVideo(v.id, patch));
   }));
 

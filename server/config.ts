@@ -44,6 +44,7 @@ export const DEFAULT_SETTINGS: Settings = {
     hashtagCount: 5,
     maxLength: 300,
     notes: "",
+    useTopCaptions: false,
   },
   schedule: {
     days: "every",

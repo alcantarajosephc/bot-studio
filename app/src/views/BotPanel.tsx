@@ -3,7 +3,8 @@ import type { CaptionRules, PublicSettings, ScheduleSettings, VideoRecord } from
 import type { LiveState } from "../lib/live";
 import { api, uploadVideos } from "../lib/api";
 import { Sprite } from "../components/Sprite";
-import { fmtDateTime, fmtTime, fromLocalInput, toLocalInput } from "../lib/format";
+import { fmtCompact, fmtDateTime, fmtTime, fromLocalInput, toLocalInput } from "../lib/format";
+import { rankBestTimes, topCaptions, TOP_CAPTIONS_CAP } from "../../../shared/insights";
 
 const STAGE_LABEL: Record<VideoRecord["stage"], string> = {
   new: "waiting",
@@ -174,6 +175,8 @@ function CaptionPanel({ live }: { live: LiveState }) {
   const [paste, setPaste] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [trainMsg, setTrainMsg] = useState("");
+  const topCapOn = Boolean(live.settings?.captionRules.useTopCaptions);
+  const autoCaptions = useMemo(() => topCaptions(live.videos), [live.videos]);
   if (!draft) return null;
   const set = (p: Partial<CaptionRules>) => setDraft({ ...draft, ...p });
 
@@ -253,7 +256,8 @@ function CaptionPanel({ live }: { live: LiveState }) {
             <button className="btn btn-yellow" disabled={!paste.trim() && !files.length} onClick={train}>Train</button>
             <span className="hint">{trainMsg}</span>
           </div>
-          {live.training.length ? (
+          <TopCaptionsToggle live={live} />
+          {live.training.length || (topCapOn && autoCaptions.length) ? (
             <div className="chips">
               {live.training.map((t) => (
                 <span key={t.name} className="chip" title={`${t.chars} characters`}>
@@ -261,6 +265,11 @@ function CaptionPanel({ live }: { live: LiveState }) {
                   <button className="btn btn-sm" style={{ padding: "0 4px", border: 0 }} onClick={() => api.del(`/api/caption/training/${encodeURIComponent(t.name)}`)}>✕</button>
                 </span>
               ))}
+              {topCapOn ? autoCaptions.map((c, i) => (
+                <span key={`top-${i}`} className="chip chip-yellow" title={c}>
+                  {c.length > 28 ? `${c.slice(0, 28)}…` : c} <small>from results</small>
+                </span>
+              )) : null}
             </div>
           ) : (
             <span className="hint">Nothing learned yet.</span>
@@ -293,6 +302,26 @@ function CaptionEditor({ v, live }: { v: VideoRecord; live: LiveState }) {
         <div className="chips">{v.caption!.keywords.map((k) => <span key={k} className="chip chip-yellow">{k}</span>)}</div>
       </div>
     </VideoRow>
+  );
+}
+
+/** Opt-in toggle that feeds the creator's highest-viewed captions into the style guide. */
+function TopCaptionsToggle({ live }: { live: LiveState }) {
+  const on = Boolean(live.settings?.captionRules.useTopCaptions);
+  const toggle = async (next: boolean) => {
+    // Merge onto saved rules so sibling rules are preserved by the server's deep merge.
+    await api.put("/api/settings", { captionRules: { ...live.settings?.captionRules, useTopCaptions: next } });
+  };
+  return (
+    <label className="row" style={{ gap: 6, alignItems: "flex-start" }}>
+      <input type="checkbox" checked={on} onChange={(e) => toggle(e.target.checked)} />
+      <span>
+        Use my top captions as style examples
+        <span className="help" style={{ display: "block" }}>
+          Adds up to {TOP_CAPTIONS_CAP} of your highest-viewed captions to the style guide, so new captions echo what already worked. Turn it off to remove them.
+        </span>
+      </span>
+    </label>
   );
 }
 
@@ -384,6 +413,12 @@ function SchedulerPanel({ live }: { live: LiveState }) {
       </section>
 
       <section className="section">
+        <h3>Your best times</h3>
+        <p className="help">Ranked from the views you've logged on posted videos. The more results you add, the sharper this gets.</p>
+        <BestTimes live={live} timeZone={tz} />
+      </section>
+
+      <section className="section">
         <h3>This week</h3>
         <WeekGrid live={live} schedule={live.settings!.schedule} />
       </section>
@@ -421,6 +456,26 @@ function SchedulerPanel({ live }: { live: LiveState }) {
         </div>
       </section>
     </>
+  );
+}
+
+/** Ranks the creator's own posting slots by average logged views. Insight only — never changes the schedule. */
+function BestTimes({ live, timeZone }: { live: LiveState; timeZone: string }) {
+  const slots = useMemo(() => rankBestTimes(live.videos, timeZone), [live.videos, timeZone]);
+  if (slots.length === 0) {
+    return <div className="card"><div className="empty">No results yet. Add view counts on posted videos and your best-performing times show up here.</div></div>;
+  }
+  return (
+    <div className="card">
+      <ul className="vlist" style={{ listStyle: "none", margin: 0, padding: 0 }}>
+        {slots.map((s) => (
+          <li key={`${s.weekday}-${s.hour}`} className="row" style={{ justifyContent: "space-between", gap: 8 }}>
+            <span><strong>{s.label}</strong> · {s.thin ? `${fmtCompact(s.min)}–${fmtCompact(s.max)} views` : `${fmtCompact(s.avg)} avg views`} · {s.count} post{s.count === 1 ? "" : "s"}</span>
+            {s.thin ? <span className="hint">(still learning)</span> : null}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -476,11 +531,81 @@ function PostingPanel({ live }: { live: LiveState }) {
             <VideoRow key={v.id} v={v} live={live}>
               <div className="caption">{v.caption?.text}</div>
               <div className="hint">{v.schedule ? fmtDateTime(v.schedule.at, tz) : ""}</div>
+              <ResultsEditor v={v} />
             </VideoRow>
           ))}
         </div>
       </section>
     </>
+  );
+}
+
+/** Skippable per-video results: type the views (and optional likes) the post got. */
+function ResultsEditor({ v }: { v: VideoRecord }) {
+  const [editing, setEditing] = useState(false);
+  const [views, setViews] = useState("");
+  const [likes, setLikes] = useState("");
+  const [err, setErr] = useState("");
+  const [ok, setOk] = useState("");
+
+  const open = () => {
+    setViews(v.results ? String(v.results.views) : "");
+    setLikes(v.results?.likes !== undefined ? String(v.results.likes) : "");
+    setErr("");
+    setOk("");
+    setEditing(true);
+  };
+
+  const validCount = (s: string) => /^\d+$/.test(s.trim());
+  const canSave = validCount(views) && (likes.trim() === "" || validCount(likes));
+
+  const save = async () => {
+    if (!canSave) {
+      setErr("Enter a whole number of views (0 or more).");
+      return;
+    }
+    try {
+      const results: { views: number; likes?: number } = { views: Number(views) };
+      if (likes.trim() !== "") results.likes = Number(likes);
+      await api.patch(`/api/videos/${v.id}`, { results });
+      setErr("");
+      setOk("Logged");
+      setEditing(false);
+      setTimeout(() => setOk(""), 1500);
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+  };
+
+  if (v.results && !editing) {
+    const r = v.results;
+    const logged = new Date(r.capturedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    const line = `${r.views.toLocaleString()} views${r.likes !== undefined ? ` · ${r.likes.toLocaleString()} likes` : ""} · logged ${logged}`;
+    return (
+      <div className="row" style={{ marginTop: 6, gap: 8 }}>
+        <span className="hint">{line}</span>
+        <button className="btn btn-sm" onClick={open}>Edit</button>
+        <span className="ok" aria-live="polite">{ok}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginTop: 6 }}>
+      <div className="row" style={{ gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
+        <label className="field" style={{ width: 120 }}>
+          Views
+          <input className="input" type="number" min={0} step={1} inputMode="numeric" value={views} onChange={(e) => setViews(e.target.value)} />
+        </label>
+        <label className="field" style={{ width: 120 }}>
+          Likes (optional)
+          <input className="input" type="number" min={0} step={1} inputMode="numeric" value={likes} onChange={(e) => setLikes(e.target.value)} />
+        </label>
+        <button className="btn btn-sm btn-yellow" disabled={!canSave} onClick={save}>Save</button>
+      </div>
+      <div className="hint">Paste the numbers this got a day or two after posting. One field, totally optional.</div>
+      {err ? <div className="err" aria-live="polite">{err}</div> : null}
+    </div>
   );
 }
 

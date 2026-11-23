@@ -78,6 +78,8 @@ export interface VideoRecord {
   transcript?: Transcript;
   caption?: { text: string; caption: string; keywords: string[]; hashtags: string[]; language: string };
   schedule?: { at: string; manual: boolean };
+  /** What the post actually got, typed back in by the creator a day or two later. */
+  results?: { views: number; likes?: number; capturedAt: string };
   error?: string;
 }
 
@@ -90,6 +92,8 @@ export interface CaptionRules {
   hashtagCount: number;
   maxLength: number;
   notes: string;
+  /** Feed the creator's highest-viewed captions into the style guide. Off by default. */
+  useTopCaptions?: boolean;
 }
 
 export type DayPreset = "every" | "weekdays" | "mwf" | "custom";

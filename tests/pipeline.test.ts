@@ -132,4 +132,24 @@ describe("bot pipeline", () => {
     expect(loadTraining().text).toContain("sulit na sulit");
     expect(loadTraining().text).toContain("end with a question");
   });
+
+  it("logs a results number on a scheduled video, persists it, and rejects bad input", async () => {
+    const v = sys.ctx.store.videos().find((x) => x.stage === "scheduled")!;
+    const res = await fetch(`${base}/api/videos/${v.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ results: { views: 12340, likes: 540 } }) });
+    expect(res.ok).toBe(true);
+    const saved = sys.ctx.store.video(v.id)!;
+    expect(saved.results?.views).toBe(12340);
+    expect(saved.results?.likes).toBe(540);
+    expect(typeof saved.results?.capturedAt).toBe("string");
+
+    // Present on GET /api/state, so it survives a reload.
+    const state = await (await fetch(`${base}/api/state`)).json();
+    const fromState = state.videos.find((x: { id: string }) => x.id === v.id);
+    expect(fromState.results.views).toBe(12340);
+
+    // Invalid input is rejected (400) and leaves the stored results unchanged.
+    const bad = await fetch(`${base}/api/videos/${v.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ results: { views: -5 } }) });
+    expect(bad.status).toBe(400);
+    expect(sys.ctx.store.video(v.id)!.results?.views).toBe(12340);
+  });
 });
