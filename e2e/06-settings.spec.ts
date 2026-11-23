@@ -6,9 +6,37 @@ test.describe.configure({ mode: "serial" });
 
 const FAKE_KEY = "gsk_e2e_not_a_real_key_123";
 
+test("fresh install defaults to the keyless combo with no key warnings", async ({ page }) => {
+  await page.goto("/#settings");
+  // Claude Code is the default writing model, local Whisper the default listening model.
+  await expect(page.getByLabel("Writing model")).toHaveValue("claude-code");
+  await expect(page.getByLabel("Listening")).toHaveValue("local");
+  // The Claude Code status row is shown (CLI is faked as signed in for the e2e server).
+  await expect(page.getByText(/Claude Code: ✓ signed in/)).toBeVisible();
+  // No red "missing" key warnings for the keyless combo, and no needs-attention dot.
+  await expect(page.getByText("missing")).toHaveCount(0);
+  await expect(page.locator(".dot-warn")).toHaveCount(0);
+});
+
+test("switching the writing model brings back the relevant key warning", async ({ page }) => {
+  await page.goto("/#settings");
+  await page.getByLabel("Writing model").selectOption("claude");
+  await expect(page.getByText(/Anthropic API key.*missing/)).toBeVisible();
+  // The Claude Code status row is only shown for the keyless writing model.
+  await expect(page.getByText(/Claude Code: /)).toHaveCount(0);
+
+  await page.getByLabel("Writing model").selectOption("groq");
+  await expect(page.getByText(/Groq API key.*missing/)).toBeVisible();
+
+  // Listening = Groq Whisper also needs a Groq key.
+  await page.getByLabel("Writing model").selectOption("claude-code");
+  await page.getByLabel("Listening").selectOption("groq");
+  await expect(page.getByText(/Groq API key.*missing/)).toBeVisible();
+  await expect(page.getByText(/Claude Code: ✓ signed in/)).toBeVisible();
+});
+
 test("keys save without ever coming back to the browser", async ({ page }) => {
   await page.goto("/#settings");
-  await expect(page.locator(".dot-warn")).toBeVisible();
   const groq = page.getByLabel(/Groq API key/);
   await groq.fill(FAKE_KEY);
   await page.getByRole("button", { name: "Save", exact: true }).click();
