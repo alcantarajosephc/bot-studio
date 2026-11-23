@@ -2,6 +2,8 @@
 
 A team of bots for short-form video. Add videos and they get a cover image, an SEO caption and a posting time. There's also a video editor that cuts and styles talking-head videos, and a Review tool for leaving timestamped notes that turn into the next version.
 
+Because posting is manual, Bot Studio also learns from your own results: paste back the view count a video got a day or two later, and it ranks which of your posting times actually performed best and can feed your top captions into the style guide. The more you log, the more personalized it gets.
+
 Posting to platforms isn't connected yet.
 
 ## Run it
@@ -49,11 +51,22 @@ Each bot is its own worker with its own queue, status and log, so different bots
 | Bot | What it does | AI? |
 |---|---|---|
 | Thumbnail | Samples up to 40 frames, scores sharpness and exposure, keeps the best | No (ffmpeg) |
-| SEO Caption | Transcribes (local Whisper or Groq), then the writing model writes the caption from your rules and style examples | Yes |
-| Scheduler | Day presets, auto spread (under 10 videos share one day, 10+ spread out, up to 100 a day) or fixed times (up to 20 a day), per-video times, reorder, time zone | No |
-| Posting | Reports what's waiting. No platform connected | No |
+| SEO Caption | Transcribes (local Whisper or Groq), then the writing model writes the caption from your rules and style examples. Optionally folds your own top-performing captions into the style examples | Yes |
+| Scheduler | Day presets, auto spread (under 10 videos share one day, 10+ spread out, up to 100 a day) or fixed times (up to 20 a day), per-video times, reorder, time zone. Shows **Your best times** ranked from the view counts you've logged | No |
+| Posting | Reports what's waiting. Log the views (and optional likes) each video got so Bot Studio can learn your best times and captions. No platform connected | No |
 | Video Editor | Transcribes and finds pauses, Claude plans the edit by word index, code compiles exact cuts, Remotion renders 1080x1920 | Yes |
 | Review | Timestamped notes are mapped back to source words, Claude revises the plan, the editor renders the next version | Yes |
+
+## Learning from your results
+
+Posting is manual, so Bot Studio can't see view counts on its own — you paste them back. A day or two after a video goes out, open the **Posting** node, find it in **Waiting to post**, and type in the views it got (likes are optional). It's one field and totally skippable; nothing breaks if you never fill it in.
+
+Once you've logged a few, two things light up:
+
+- **Your best times** (Scheduler node) ranks your own posting slots — the weekday and hour of each schedule — by average views, so you can see which of your times actually worked instead of a generic preset. Only videos with a logged view count count toward a slot. Thin slots (fewer than three posts) show a min–max range marked *(still learning)* rather than a false-precise average, so early, noisy signals aren't oversold.
+- **Use my top captions as style examples** (Caption node → *Teach it your style*) is an opt-in toggle that adds up to three of your highest-viewed captions to the voice training set, so new captions echo what already worked. Turn it off and they're removed again — the style guide falls back to only the text you uploaded.
+
+No external APIs, scraping or platform analytics are involved — just the number you type.
 
 ## Customizing
 
@@ -70,6 +83,7 @@ Each bot is its own worker with its own queue, status and log, so different bots
 | Video look (fonts, colors, caption size and position) | `editor-remotion/theme.ts`, `editor-remotion/EditVideo.tsx` |
 | Cut rules (padding, caption length) | constants at the top of `server/bots/editor/compile.ts` |
 | Scheduling rules | `server/bots/scheduler.ts` |
+| Best-times ranking and top-caption selection | `shared/insights.ts` (sample-size threshold, caption cap) |
 | Posting to TikTok / Facebook / Instagram / YouTube | implement `PostingAdapter` in `server/bots/posting.ts` |
 | Office layout | `DESKS` / `LOUNGE` in `app/src/views/Office.tsx` |
 | Live events for new UI | subscribe to the `EventBus` in `server/core/events.ts` |
@@ -84,7 +98,7 @@ All tests use fake AI providers, so they run free and need no keys.
 
 | Command | What runs |
 |---|---|
-| `npm test` | Vitest, 64 tests: thumbnail scoring, caption prompts, scheduler rules, format helpers, the timeline compiler, the Claude Code CLI provider (with a fake `claude` command), the settings allowlist, the full pipeline over HTTP, and a real Remotion render of a first version and a revised one |
+| `npm test` | Vitest, 73 tests: thumbnail scoring, caption prompts, scheduler rules, best-times ranking and top-caption selection, format helpers, the timeline compiler, the Claude Code CLI provider (with a fake `claude` command), the settings allowlist, the full pipeline over HTTP (including logging a video's results), and a real Remotion render of a first version and a revised one |
 | `npm run test:e2e` | Playwright, 31 tests in a real Chromium: every page and panel, uploading and dropping videos, Run everything and Running, caption rules and style training, scheduler changes, the keyless Claude Code default and switching to API keys, the office canvas (including a live hand-off reel and the batch celebration), the editor → Review → revise loop, and keys never reaching the browser |
 | `npm run test:all` | Typecheck, then both of the above |
 
