@@ -5,6 +5,7 @@ import type { CaptionRules } from "../../shared/types.ts";
 import type { BotContext } from "../core/context.ts";
 import { getSettings, paths, ROOT } from "../config.ts";
 import { extractAudio } from "../media/ffmpeg.ts";
+import { topCaptions } from "../../shared/insights.ts";
 
 export const CaptionSchema = z.object({
   caption: z.string().describe("The caption text, without hashtags."),
@@ -60,18 +61,29 @@ function trainingFiles(): string[] {
     .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
 }
 
-/** Newest training text first, capped so the prompt stays a sensible size. */
-export function loadTraining(): { text: string; truncated: boolean } {
+/**
+ * Newest training text first, capped so the prompt stays a sensible size.
+ * `extra` holds extra style examples (e.g. the creator's top captions) that are
+ * appended after the uploaded files; a literal closing tag is stripped so an
+ * example can't break out of the <style_examples> block in the prompt.
+ */
+export function loadTraining(extra: string[] = []): { text: string; truncated: boolean } {
   let text = "";
   let truncated = false;
-  for (const f of trainingFiles()) {
-    const t = fs.readFileSync(f, "utf8").trim();
-    if (!t) continue;
+  const add = (t: string): boolean => {
+    if (!t) return true;
     if (text.length + t.length > TRAINING_LIMIT) {
       truncated = true;
-      break;
+      return false;
     }
     text += (text ? "\n\n---\n\n" : "") + t;
+    return true;
+  };
+  for (const f of trainingFiles()) {
+    if (!add(fs.readFileSync(f, "utf8").trim())) return { text, truncated };
+  }
+  for (const e of extra) {
+    if (!add(e.replace(/<\/?style_examples>/gi, "").trim())) break;
   }
   return { text, truncated };
 }
@@ -136,7 +148,8 @@ export async function captionJob(ctx: BotContext, videoId: string): Promise<void
   }
 
   bot.setStatus("working", `Captioning ${v.originalName}`);
-  const training = loadTraining();
+  const extra = settings.captionRules.useTopCaptions ? topCaptions(ctx.store.videos()) : [];
+  const training = loadTraining(extra);
   if (training.truncated) bot.log("Training text is long; using the newest examples only.");
   const { system, prompt } = buildCaptionPrompt({ transcript: transcript.text, fileName: v.originalName, rules: settings.captionRules, training: training.text });
   const out = await ctx.providers.llm().generateObject({ system, prompt, schema: CaptionSchema, effort: "medium", maxTokens: 4000 });
