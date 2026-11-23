@@ -270,7 +270,7 @@ function CaptionPanel({ live }: { live: LiveState }) {
 
       <section className="section">
         <h3>Captions</h3>
-        <p className="help">Edit any caption before it posts.</p>
+        <p className="help">Each video comes with a few hook options. Pick the strongest, then edit it before it posts.</p>
         <div className="vlist">
           {live.videos.filter((v) => v.caption).length === 0 ? <div className="empty">No captions yet.</div> : null}
           {live.videos.filter((v) => v.caption).map((v) => (
@@ -285,9 +285,36 @@ function CaptionPanel({ live }: { live: LiveState }) {
 function CaptionEditor({ v, live }: { v: VideoRecord; live: LiveState }) {
   const [text, setText] = useState(v.caption!.text);
   useEffect(() => setText(v.caption!.text), [v.caption!.text]); // eslint-disable-line react-hooks/exhaustive-deps
+  const candidates = v.captionCandidates ?? [];
+  const selected = v.selectedCaption ?? 0;
+  const hookOf = (caption: string) => caption.trim().split("\n")[0] || caption.trim();
   return (
     <VideoRow v={v} live={live}>
-      <textarea className="input" style={{ marginTop: 6 }} value={text} onChange={(e) => setText(e.target.value)} />
+      {candidates.length > 1 ? (
+        <div style={{ marginTop: 6 }}>
+          <span className="hint">Pick a hook</span>
+          <div className="toggle-group" role="radiogroup" aria-label="Hook options" style={{ marginTop: 2 }}>
+            {candidates.map((c, i) => {
+              const hook = hookOf(c.caption);
+              return (
+                <button
+                  key={i}
+                  className={i === selected ? "on" : ""}
+                  role="radio"
+                  aria-checked={i === selected}
+                  aria-label={`Use hook option ${i + 1}: ${hook}`}
+                  title={hook}
+                  style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                  onClick={() => api.patch(`/api/videos/${v.id}`, { selectedCaption: i })}
+                >
+                  {i === selected ? "✓ Selected · " : ""}{hook}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+      <textarea className="input" aria-label="Caption text" style={{ marginTop: 6 }} value={text} onChange={(e) => setText(e.target.value)} />
       <div className="row" style={{ marginTop: 4 }}>
         <button className="btn btn-sm" disabled={text === v.caption!.text} onClick={() => api.patch(`/api/videos/${v.id}`, { captionText: text })}>Save caption</button>
         <div className="chips">{v.caption!.keywords.map((k) => <span key={k} className="chip chip-yellow">{k}</span>)}</div>

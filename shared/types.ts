@@ -77,6 +77,10 @@ export interface VideoRecord {
   thumbnail?: { file: string; time: number; reason: string };
   transcript?: Transcript;
   caption?: { text: string; caption: string; keywords: string[]; hashtags: string[]; language: string };
+  /** Hook-led caption options from the single generation pass. Kept lightweight: no transcript. */
+  captionCandidates?: { caption: string; keywords: string[]; hashtags: string[] }[];
+  /** Index into captionCandidates marking the active caption. Defaults to 0. */
+  selectedCaption?: number;
   schedule?: { at: string; manual: boolean };
   error?: string;
 }

@@ -6,10 +6,18 @@ import type { BotContext } from "../core/context.ts";
 import { getSettings, paths, ROOT } from "../config.ts";
 import { extractAudio } from "../media/ffmpeg.ts";
 
-export const CaptionSchema = z.object({
-  caption: z.string().describe("The caption text, without hashtags."),
+export const CaptionCandidateSchema = z.object({
+  caption: z.string().describe("The caption text, without hashtags. Its first line is the hook."),
   keywords: z.array(z.string()).describe("Search phrases used in the caption."),
   hashtags: z.array(z.string()).describe("Hashtags, empty if hashtags are off."),
+});
+export type CaptionCandidate = z.infer<typeof CaptionCandidateSchema>;
+
+export const CaptionSchema = z.object({
+  captions: z
+    .array(CaptionCandidateSchema)
+    .length(3)
+    .describe("Exactly 3 caption options. Each must open with a genuinely different hook/angle (a different first line and promise), not reworded variants of the same hook."),
 });
 export type CaptionOutput = z.infer<typeof CaptionSchema>;
 
@@ -39,14 +47,29 @@ export function buildCaptionPrompt(input: { transcript: string; fileName: string
   if (input.training.trim()) {
     system += `\n\n<style_examples>\nThe creator's past captions and notes. Match their voice, word choice and format:\n${input.training.trim()}\n</style_examples>`;
   }
-  const prompt = `Video file: ${input.fileName}\n\n<transcript>\n${input.transcript.trim() || "(no speech detected)"}\n</transcript>\n\nWrite the caption.`;
+  const prompt = `Video file: ${input.fileName}\n\n<transcript>\n${input.transcript.trim() || "(no speech detected)"}\n</transcript>\n\nWrite 3 caption options, each opening with a distinct hook.`;
   return { system, prompt };
 }
 
-export function finalCaptionText(out: CaptionOutput, rules: CaptionRules): string {
+export function finalCaptionText(out: CaptionCandidate, rules: CaptionRules): string {
   if (!rules.hashtags || out.hashtags.length === 0) return out.caption.trim();
   const tags = out.hashtags.map((h) => `#${h.trim().replace(/^#+/, "").replace(/\s+/g, "")}`).join(" ");
   return `${out.caption.trim()}\n\n${tags}`;
+}
+
+/** The "active" caption shape stored on the VideoRecord, assembled from one candidate. */
+export function assembleActiveCaption(
+  candidate: CaptionCandidate,
+  rules: CaptionRules,
+  language: string,
+): { text: string; caption: string; keywords: string[]; hashtags: string[]; language: string } {
+  return {
+    text: finalCaptionText(candidate, rules),
+    caption: candidate.caption,
+    keywords: candidate.keywords,
+    hashtags: candidate.hashtags,
+    language,
+  };
 }
 
 // ----- style training -----
@@ -140,10 +163,14 @@ export async function captionJob(ctx: BotContext, videoId: string): Promise<void
   if (training.truncated) bot.log("Training text is long; using the newest examples only.");
   const { system, prompt } = buildCaptionPrompt({ transcript: transcript.text, fileName: v.originalName, rules: settings.captionRules, training: training.text });
   const out = await ctx.providers.llm().generateObject({ system, prompt, schema: CaptionSchema, effort: "medium", maxTokens: 4000 });
-  const text = finalCaptionText(out, settings.captionRules);
+  const candidates = out.captions;
+  const selected = 0;
+  const active = assembleActiveCaption(candidates[selected], settings.captionRules, settings.captionRules.language);
   ctx.store.updateVideo(v.id, {
     stage: "captioned",
-    caption: { text, caption: out.caption, keywords: out.keywords, hashtags: out.hashtags, language: settings.captionRules.language },
+    caption: active,
+    captionCandidates: candidates.map((c) => ({ caption: c.caption, keywords: c.keywords, hashtags: c.hashtags })),
+    selectedCaption: selected,
   });
-  bot.log(`Caption ready for ${v.originalName}: ${out.keywords.slice(0, 6).join(", ")}`);
+  bot.log(`Caption ready for ${v.originalName}: ${active.keywords.slice(0, 6).join(", ")}`);
 }
