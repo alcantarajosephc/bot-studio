@@ -12,6 +12,17 @@ fs.rmSync(dataDir, { recursive: true, force: true });
 process.env.BOTS_DATA_DIR = dataDir;
 const port = Number(process.env.BOTS_PORT ?? 4848);
 
+// Make the keyless default deterministic: a fake, "signed in" Claude Code CLI so the
+// Settings page reports "✓ signed in" without a real CLI install. The UI tests use fake
+// providers, so this is never actually invoked for generation.
+const cliDir = path.join(dataDir, "fake-claude");
+const configDir = path.join(cliDir, "config");
+fs.mkdirSync(configDir, { recursive: true });
+fs.writeFileSync(path.join(cliDir, "claude.mjs"), "process.stdin.resume();process.stdin.on('end',()=>process.exit(0));");
+fs.writeFileSync(path.join(configDir, ".credentials.json"), "{}");
+process.env.CLAUDE_CODE_PATH = path.join(cliDir, "claude.mjs");
+process.env.CLAUDE_CONFIG_DIR = configDir;
+
 const { createBotSystem } = await import("../server/system.ts");
 const { createApp } = await import("../server/app.ts");
 type LlmProvider = import("../server/providers/llm/types.ts").LlmProvider;

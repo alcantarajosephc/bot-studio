@@ -1,5 +1,6 @@
 import { apiKey, getSettings } from "../config.ts";
 import { ClaudeProvider } from "./llm/claude.ts";
+import { ClaudeCodeProvider } from "./llm/claude-code.ts";
 import { GroqLlmProvider } from "./llm/groq.ts";
 import type { LlmProvider } from "./llm/types.ts";
 import { GroqTranscriber, LocalWhisperTranscriber, type Transcriber } from "./transcribe.ts";
@@ -13,6 +14,7 @@ export interface Providers {
 export const defaultProviders: Providers = {
   llm() {
     const s = getSettings().llm;
+    if (s.provider === "claude-code") return new ClaudeCodeProvider(s.claudeCodeModel);
     return s.provider === "groq"
       ? new GroqLlmProvider(apiKey("groq"), s.groqModel)
       : new ClaudeProvider(apiKey("anthropic"), s.claudeModel);

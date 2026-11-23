@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { ClaudeCodeStatus } from "../../shared/types";
 import { APP_NAME } from "../../shared/brand";
 import { useLive } from "./lib/live";
 import { api } from "./lib/api";
@@ -32,7 +33,23 @@ export function App() {
   const [tab, setTabState] = useState<Tab>(readHash);
   const [panel, setPanel] = useState<string | null>(null);
   const [reviewProject, setReviewProject] = useState<string | null>(null);
+  const [cliStatus, setCliStatus] = useState<ClaudeCodeStatus | null>(null);
   const running = live.settings?.running ?? false;
+  const usingClaudeCode = live.settings?.llm.provider === "claude-code";
+
+  useEffect(() => {
+    if (!usingClaudeCode) {
+      setCliStatus(null);
+      return;
+    }
+    let active = true;
+    api.get<{ status: ClaudeCodeStatus }>("/api/claude-code/status")
+      .then((r) => active && setCliStatus(r.status))
+      .catch(() => active && setCliStatus("not-found"));
+    return () => {
+      active = false;
+    };
+  }, [usingClaudeCode]);
 
   useEffect(() => {
     const onHash = () => {
@@ -55,7 +72,13 @@ export function App() {
     setPanel(id);
   };
 
-  const missingKeys = live.settings && (!live.settings.keys.anthropic || !live.settings.keys.groq);
+  // Only warn about setup problems the current selection actually has:
+  // a missing key for a selected API provider, or a Claude Code CLI that isn't ready.
+  const settings = live.settings;
+  const anthropicProblem = !!settings && settings.llm.provider === "claude" && !settings.keys.anthropic;
+  const groqProblem = !!settings && (settings.llm.provider === "groq" || settings.transcription.provider === "groq") && !settings.keys.groq;
+  const cliProblem = usingClaudeCode && (cliStatus === "not-found" || cliStatus === "not-signed-in");
+  const needsAttention = anthropicProblem || groqProblem || cliProblem;
 
   return (
     <div className="app">
@@ -71,10 +94,10 @@ export function App() {
               key={t.id}
               className={`tab ${tab === t.id ? "active" : ""}`}
               onClick={() => setTab(t.id)}
-              title={t.id === "settings" && missingKeys ? "API keys missing" : undefined}
+              title={t.id === "settings" && needsAttention ? "This setup needs attention" : undefined}
             >
               {t.label}
-              {t.id === "settings" && missingKeys ? <span className="dot-warn" aria-hidden /> : null}
+              {t.id === "settings" && needsAttention ? <span className="dot-warn" aria-hidden /> : null}
             </button>
           ))}
         </nav>

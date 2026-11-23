@@ -112,7 +112,7 @@ export interface ScheduleSettings {
 
 export interface Settings {
   keys: { anthropic: string; groq: string };
-  llm: { provider: "claude" | "groq"; claudeModel: string; groqModel: string };
+  llm: { provider: "claude" | "groq" | "claude-code"; claudeModel: string; groqModel: string; claudeCodeModel: string };
   transcription: { provider: "groq" | "local"; language: "auto" | "en" | "tl"; groqModel: string; localModel: string };
   captionRules: CaptionRules;
   schedule: ScheduleSettings;
@@ -121,6 +121,9 @@ export interface Settings {
 
 /** Settings as sent to the browser: keys are masked. */
 export type PublicSettings = Omit<Settings, "keys"> & { keys: { anthropic: boolean; groq: boolean } };
+
+/** Result of the Claude Code CLI readiness check (GET /api/claude-code/status). */
+export type ClaudeCodeStatus = "checking" | "ok" | "not-found" | "not-signed-in";
 
 // ---------- Video editor ----------
 

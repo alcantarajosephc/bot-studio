@@ -6,6 +6,10 @@ import type { BotSystem } from "./system.ts";
 import { loadBotMeta, paths, publicSettings, ROOT, updateSettings } from "./config.ts";
 import { deleteTraining, extractTrainingText, listTraining, saveTraining } from "./bots/caption.ts";
 import { VIDEO_EXT } from "./bots/manager.ts";
+import { checkClaudeCode } from "./providers/llm/claude-code.ts";
+
+/** Top-level settings keys a client is allowed to persist. Anything else in the body is dropped. */
+const SETTINGS_FIELDS = ["keys", "clearKeys", "llm", "transcription", "captionRules", "schedule", "running"] as const;
 
 type Handler = (req: Request, res: Response) => unknown;
 const wrap = (fn: Handler) => (req: Request, res: Response, next: NextFunction) => {
@@ -110,19 +114,25 @@ export function createApp(sys: BotSystem) {
 
   // ----- settings -----
   app.get("/api/settings", (_req, res) => res.json(publicSettings()));
+  app.get("/api/claude-code/status", (_req, res) => res.json({ status: checkClaudeCode() }));
   app.put("/api/settings", (req, res) => {
-    const body = { ...req.body };
+    // Allowlist top-level fields so a client can't persist arbitrary settings (e.g. an executable path).
+    const body: Record<string, unknown> = {};
+    for (const k of SETTINGS_FIELDS) if (req.body?.[k] !== undefined) body[k] = req.body[k];
     // Keys: only overwrite when a new key is typed; "" with clearKeys removes it.
+    const inKeys = body.keys as Record<string, unknown> | undefined;
+    const clearKeys = body.clearKeys as unknown[] | undefined;
     const keys: Record<string, string> = {};
     for (const k of ["anthropic", "groq"] as const) {
-      const val = body.keys?.[k];
+      const val = inKeys?.[k];
       if (typeof val === "string" && val.trim()) keys[k] = val.trim();
-      if (body.clearKeys?.includes?.(k)) keys[k] = "";
+      if (Array.isArray(clearKeys) && clearKeys.includes(k)) keys[k] = "";
     }
     delete body.keys;
     delete body.clearKeys;
     if (Object.keys(keys).length) body.keys = keys;
-    if (body.schedule?.times) body.schedule.times = body.schedule.times.slice(0, 20);
+    const schedule = body.schedule as { times?: unknown[] } | undefined;
+    if (Array.isArray(schedule?.times)) schedule.times = schedule.times.slice(0, 20);
     updateSettings(body);
     const s = publicSettings();
     ctx.bus.emit({ type: "settings", settings: s });

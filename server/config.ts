@@ -34,8 +34,9 @@ export function loadBotMeta(): BotMeta[] {
 
 export const DEFAULT_SETTINGS: Settings = {
   keys: { anthropic: "", groq: "" },
-  llm: { provider: "claude", claudeModel: "claude-opus-5-5", groqModel: "llama-3.3-70b-versatile" },
-  transcription: { provider: "groq", language: "auto", groqModel: "whisper-large-v3", localModel: "small" },
+  // Default to the keyless combo: Claude Code CLI for writing + local Whisper for listening, so a fresh install needs no API keys.
+  llm: { provider: "claude-code", claudeModel: "claude-opus-5-5", groqModel: "llama-3.3-70b-versatile", claudeCodeModel: "claude-opus-5-5" },
+  transcription: { provider: "local", language: "auto", groqModel: "whisper-large-v3", localModel: "small" },
   captionRules: {
     language: "taglish",
     keywordCount: 5,
