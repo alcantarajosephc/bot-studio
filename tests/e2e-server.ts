@@ -62,7 +62,13 @@ const llm: LlmProvider = {
         titleCards: [],
       });
     }
-    return opts.schema.parse({ caption: "Three quick tips for beginners", keywords: ["quick tips", "beginner tips"], hashtags: ["tips", "beginners"] });
+    return opts.schema.parse({
+      captions: [
+        { caption: "Three quick tips for beginners", keywords: ["quick tips", "beginner tips"], hashtags: ["tips", "beginners"] },
+        { caption: "The beginner mistake to avoid", keywords: ["beginner mistakes"], hashtags: ["mistakes"] },
+        { caption: "Start here if you're brand new", keywords: ["getting started"], hashtags: ["howto"] },
+      ],
+    });
   },
 };
 

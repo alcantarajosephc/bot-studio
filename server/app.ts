@@ -3,8 +3,8 @@ import path from "node:path";
 import express, { type NextFunction, type Request, type Response } from "express";
 import multer from "multer";
 import type { BotSystem } from "./system.ts";
-import { loadBotMeta, paths, publicSettings, ROOT, updateSettings } from "./config.ts";
-import { deleteTraining, extractTrainingText, listTraining, saveTraining } from "./bots/caption.ts";
+import { getSettings, loadBotMeta, paths, publicSettings, ROOT, updateSettings } from "./config.ts";
+import { assembleActiveCaption, deleteTraining, extractTrainingText, listTraining, saveTraining } from "./bots/caption.ts";
 import { VIDEO_EXT } from "./bots/manager.ts";
 import { checkClaudeCode } from "./providers/llm/claude-code.ts";
 
@@ -75,7 +75,15 @@ export function createApp(sys: BotSystem) {
     const v = ctx.store.video(String(req.params.id));
     if (!v) return res.status(404).json({ error: "Not found" });
     const patch: Parameters<typeof ctx.store.updateVideo>[1] = {};
-    if (typeof req.body.captionText === "string" && v.caption) patch.caption = { ...v.caption, text: req.body.captionText };
+    // Picking a hook option: rebuild the active caption from the chosen candidate.
+    const sel = req.body.selectedCaption;
+    const candidates = v.captionCandidates;
+    if (candidates && Number.isInteger(sel) && sel >= 0 && sel < candidates.length) {
+      const rules = getSettings().captionRules;
+      patch.selectedCaption = sel;
+      patch.caption = assembleActiveCaption(candidates[sel], rules, v.caption?.language ?? rules.language);
+    }
+    if (typeof req.body.captionText === "string" && v.caption) patch.caption = { ...(patch.caption ?? v.caption), text: req.body.captionText };
     if (req.body.schedule === null) patch.schedule = undefined;
     else if (req.body.schedule?.at) patch.schedule = { at: new Date(req.body.schedule.at).toISOString(), manual: true };
     if (patch.schedule && v.stage === "captioned") patch.stage = "scheduled";
@@ -92,7 +100,7 @@ export function createApp(sys: BotSystem) {
     const id = String(req.params.id);
     const v = ctx.store.video(id);
     if (!v) return res.status(404).json({ error: "Not found" });
-    ctx.store.updateVideo(id, { stage: "new", error: undefined, caption: undefined, ...(req.body?.relisten ? { transcript: undefined } : {}) });
+    ctx.store.updateVideo(id, { stage: "new", error: undefined, caption: undefined, captionCandidates: undefined, selectedCaption: undefined, ...(req.body?.relisten ? { transcript: undefined } : {}) });
     manager.process(id);
     res.json({ ok: true });
   });

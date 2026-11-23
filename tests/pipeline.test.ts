@@ -11,7 +11,13 @@ let sys: BotSystem;
 let base: string;
 let server: Server;
 let videoFile: string;
-const llm = new FakeLlm(() => ({ caption: "How I grow on TikTok as a beginner", keywords: ["grow on tiktok", "tiktok tips"], hashtags: ["tiktoktips", "#contentcreator"] }));
+const llm = new FakeLlm(() => ({
+  captions: [
+    { caption: "How I grow on TikTok as a beginner", keywords: ["grow on tiktok", "tiktok tips"], hashtags: ["tiktoktips", "#contentcreator"] },
+    { caption: "The TikTok mistake keeping you small", keywords: ["tiktok growth"], hashtags: ["tiktokgrowth"] },
+    { caption: "Grow on TikTok with zero followers", keywords: ["tiktok for beginners"], hashtags: ["beginner"] },
+  ],
+}));
 const transcriber = new FakeTranscriber({ text: "today I will show you how to grow on tiktok", words: [] });
 
 beforeAll(async () => {
@@ -53,6 +59,12 @@ describe("bot pipeline", () => {
       expect(v.thumbnail?.file).toBeTruthy();
       expect(fs.existsSync(path.join(process.env.BOTS_DATA_DIR!, "thumbs", v.thumbnail!.file))).toBe(true);
       expect(v.caption?.text).toBe("How I grow on TikTok as a beginner\n\n#tiktoktips #contentcreator");
+      // 3 lightweight candidates persisted, first selected by default (AC-4/AC-9).
+      expect(v.captionCandidates).toHaveLength(3);
+      expect(v.selectedCaption).toBe(0);
+      for (const c of v.captionCandidates!) {
+        expect(Object.keys(c).sort()).toEqual(["caption", "hashtags", "keywords"]);
+      }
       expect(DateTime.fromISO(v.schedule!.at) > DateTime.now()).toBe(true);
     }
     // under 10 videos -> one day
@@ -77,10 +89,21 @@ describe("bot pipeline", () => {
     expect(posting.state.status).toBe("off");
   });
 
-  it("lets you edit a caption, give a video its own time, and reorder", async () => {
+  it("lets you pick a hook option, edit a caption, give a video its own time, and reorder", async () => {
     const [a, b] = sys.ctx.store.videos();
+
+    // Pick a different hook: the active caption is rebuilt from that candidate and the pick persists.
+    await fetch(`${base}/api/videos/${a.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ selectedCaption: 1 }) });
+    expect(sys.ctx.store.video(a.id)!.selectedCaption).toBe(1);
+    expect(sys.ctx.store.video(a.id)!.caption!.text).toBe("The TikTok mistake keeping you small\n\n#tiktokgrowth");
+    // Out-of-range / non-integer picks are ignored, not errors.
+    await fetch(`${base}/api/videos/${a.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ selectedCaption: 9 }) });
+    expect(sys.ctx.store.video(a.id)!.selectedCaption).toBe(1);
+
     await fetch(`${base}/api/videos/${a.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ captionText: "my own caption" }) });
     expect(sys.ctx.store.video(a.id)!.caption!.text).toBe("my own caption");
+    // Free-text edit keeps the selection.
+    expect(sys.ctx.store.video(a.id)!.selectedCaption).toBe(1);
 
     const at = DateTime.now().plus({ days: 5 }).startOf("hour").toUTC().toISO()!;
     await fetch(`${base}/api/videos/${b.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ schedule: { at } }) });
