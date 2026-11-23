@@ -83,6 +83,9 @@ export interface VideoRecord {
 
 export type CaptionLanguage = "en" | "tl" | "taglish";
 
+/** Platform whose hard length ceiling the caption-health check uses. */
+export type CaptionPlatform = "tiktok" | "instagram" | "youtube";
+
 export interface CaptionRules {
   language: CaptionLanguage;
   keywordCount: number;
@@ -90,6 +93,35 @@ export interface CaptionRules {
   hashtagCount: number;
   maxLength: number;
   notes: string;
+  /** Which platform's length ceiling the health check measures against. */
+  platform: CaptionPlatform;
+  /** Editable risk / strong-language words (comma or newline separated). Seeded English + Taglish. */
+  riskWords: string;
+  /** Editable overused / banned-generic hashtags (comma or newline separated, with or without #). */
+  bannedHashtags: string;
+}
+
+/** One advisory caption-health finding. `message` is the "why this hurts reach" line. */
+export interface CaptionWarning {
+  type:
+    | "risk-word"
+    | "url"
+    | "link-in-bio"
+    | "all-caps"
+    | "duplicate-hashtag"
+    | "banned-hashtag"
+    | "hashtag-count"
+    | "length";
+  /** The offending token, highlighted in the UI. */
+  token: string;
+  /** One-line, guidance-framed explanation ("may reduce reach"), never a guarantee. */
+  message: string;
+}
+
+/** Result of the advisory caption-health lint. Never blocks anything. */
+export interface CaptionHealth {
+  healthy: boolean;
+  warnings: CaptionWarning[];
 }
 
 export type DayPreset = "every" | "weekdays" | "mwf" | "custom";

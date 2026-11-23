@@ -3,6 +3,7 @@ import type { CaptionRules, PublicSettings, ScheduleSettings, VideoRecord } from
 import type { LiveState } from "../lib/live";
 import { api, uploadVideos } from "../lib/api";
 import { Sprite } from "../components/Sprite";
+import { CaptionHealth } from "../components/CaptionHealth";
 import { fmtDateTime, fmtTime, fromLocalInput, toLocalInput } from "../lib/format";
 
 const STAGE_LABEL: Record<VideoRecord["stage"], string> = {
@@ -131,7 +132,12 @@ function Library({ live }: { live: LiveState }) {
           {live.videos.length === 0 ? <div className="empty">No videos yet.</div> : null}
           {live.videos.map((v) => (
             <VideoRow key={v.id} v={v} live={live}>
-              {v.caption ? <div className="caption">{v.caption.text}</div> : null}
+              {v.caption ? (
+                <>
+                  <div className="caption">{v.caption.text}</div>
+                  <div style={{ marginTop: 4 }}><CaptionHealth text={v.caption.text} rules={live.settings?.captionRules} /></div>
+                </>
+              ) : null}
             </VideoRow>
           ))}
         </div>
@@ -236,6 +242,30 @@ function CaptionPanel({ live }: { live: LiveState }) {
             Anything else the bot should always do
             <textarea className="input" placeholder="e.g. Always mention my shop link in bio. Never use emojis." value={draft.notes} onChange={(e) => set({ notes: e.target.value })} />
           </label>
+
+          <div className="row">
+            <span className="hint" style={{ width: 90 }}>Length limit for</span>
+            <div className="toggle-group">
+              {(["tiktok", "instagram", "youtube"] as const).map((p) => (
+                <button key={p} className={(draft.platform ?? "tiktok") === p ? "on" : ""} onClick={() => set({ platform: p })}>
+                  {p === "tiktok" ? "TikTok" : p === "instagram" ? "Instagram" : "YouTube"}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="field" style={{ gap: 6 }}>
+            <strong style={{ color: "var(--text)", fontSize: 13 }}>Caption health words</strong>
+            <span className="help">Starter list for English and Taglish/Tagalog. Edit it to fit your audience — these are hints, not rules.</span>
+            <label className="field">
+              Risk &amp; strong-language words (one per line or comma-separated)
+              <textarea className="input" value={draft.riskWords ?? ""} onChange={(e) => set({ riskWords: e.target.value })} />
+            </label>
+            <label className="field">
+              Overused / banned-generic hashtags
+              <textarea className="input" value={draft.bannedHashtags ?? ""} onChange={(e) => set({ bannedHashtags: e.target.value })} />
+            </label>
+          </div>
+
           <div className="row">
             <button className="btn btn-yellow" disabled={!dirty} onClick={save}>Save rules</button>
             <span className="ok">{msg}</span>
@@ -288,6 +318,9 @@ function CaptionEditor({ v, live }: { v: VideoRecord; live: LiveState }) {
   return (
     <VideoRow v={v} live={live}>
       <textarea className="input" style={{ marginTop: 6 }} value={text} onChange={(e) => setText(e.target.value)} />
+      <div style={{ marginTop: 4 }}>
+        <CaptionHealth text={text} rules={live.settings?.captionRules} interactive />
+      </div>
       <div className="row" style={{ marginTop: 4 }}>
         <button className="btn btn-sm" disabled={text === v.caption!.text} onClick={() => api.patch(`/api/videos/${v.id}`, { captionText: text })}>Save caption</button>
         <div className="chips">{v.caption!.keywords.map((k) => <span key={k} className="chip chip-yellow">{k}</span>)}</div>
@@ -474,6 +507,7 @@ function PostingPanel({ live }: { live: LiveState }) {
         <div className="vlist">
           {waiting.map((v) => (
             <VideoRow key={v.id} v={v} live={live}>
+              {v.caption ? <div style={{ marginBottom: 4 }}><CaptionHealth text={v.caption.text} rules={live.settings?.captionRules} /></div> : null}
               <div className="caption">{v.caption?.text}</div>
               <div className="hint">{v.schedule ? fmtDateTime(v.schedule.at, tz) : ""}</div>
             </VideoRow>

@@ -234,6 +234,21 @@ textarea.input { resize: vertical; min-height: 80px; }
 .empty { color: var(--muted); text-align: center; padding: 30px; }
 .banner { background: rgba(245, 197, 24, 0.1); border: 1px solid rgba(245, 197, 24, 0.35); color: #f8dd7a; border-radius: 10px; padding: 10px 14px; font-size: 13px; }
 
+/* Advisory caption-health chip + warnings. Never color-only: always paired with a ✓/⚠ glyph and text. */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.caption-health { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.chip-amber,
+.health-chip.warn { background: rgba(245, 138, 58, 0.18); color: #f6a35e; }
+.health-chip { font: inherit; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; border: 1px solid transparent; cursor: default; }
+.health-chip.ok { background: rgba(60, 199, 138, 0.18); color: var(--green); border-color: rgba(60, 199, 138, 0.4); }
+.health-chip.warn { border-color: rgba(245, 138, 58, 0.5); }
+button.health-chip:not(:disabled) { cursor: pointer; }
+button.health-chip[aria-expanded="true"] { outline: 1px solid rgba(245, 138, 58, 0.6); }
+.health-panel { padding: 10px 12px; }
+.health-list { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.health-list li { font-size: 12.5px; color: #cfd2db; line-height: 1.4; }
+.health-mark { background: rgba(245, 138, 58, 0.22); color: #ffd3ad; border-bottom: 2px solid var(--orange); border-radius: 3px; padding: 0 3px; }
+
 @media (max-width: 1000px) {
   .canvas-wrap { grid-template-columns: 1fr; grid-template-rows: 1fr auto auto; }
   .botlog { grid-row: auto; grid-column: 1; max-height: 260px; border-left: 0; border-top: 1px solid var(--line); }

@@ -44,6 +44,14 @@ export const DEFAULT_SETTINGS: Settings = {
     hashtagCount: 5,
     maxLength: 300,
     notes: "",
+    // Caption-health check. All advisory, all editable — starter lists for English + Taglish/Tagalog.
+    platform: "tiktok",
+    riskWords:
+      "giveaway, free money, cashapp, crypto, bitcoin, kill, gun, nude, sexy, scam, click here, dm me, " +
+      "libre, pera, scam, bobo, tanga, gago, patay",
+    bannedHashtags:
+      "fyp, fypシ, foryou, foryoupage, viral, trending, follow, followme, like4like, love, instagood, explore, " +
+      "pinoy, fypph, trendingph",
   },
   schedule: {
     days: "every",
