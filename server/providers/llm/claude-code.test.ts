@@ -32,6 +32,11 @@ process.stdin.on("end", () => {
     process.stdout.write(JSON.stringify({ type: "result", is_error: false, result: JSON.stringify({ wrong: 1 }) }));
     process.exit(0);
   }
+  if (mode === "fenced") {
+    const inner = JSON.stringify({ caption: "Fenced", keywords: ["x"] });
+    process.stdout.write(JSON.stringify({ type: "result", is_error: false, result: "Here you go:\\n\`\`\`json\\n" + inner + "\\n\`\`\`" }));
+    process.exit(0);
+  }
   if (mode === "slow") {
     setTimeout(() => {
       process.stdout.write(JSON.stringify({ type: "result", is_error: false, result: JSON.stringify({ caption: "late", keywords: [] }) }));
@@ -149,5 +154,12 @@ describe("ClaudeCodeProvider.generateObject", () => {
     setMode("schema-violation");
     const provider = new ClaudeCodeProvider("m");
     await expect(provider.generateObject({ system: "s", prompt: "p", schema: Schema })).rejects.toThrow();
+  });
+
+  it("AC-10 robustness: parses JSON the model wrapped in a ```json fence and prose", async () => {
+    setMode("fenced");
+    const provider = new ClaudeCodeProvider("m");
+    const out = await provider.generateObject({ system: "s", prompt: "p", schema: Schema });
+    expect(out).toEqual({ caption: "Fenced", keywords: ["x"] });
   });
 });

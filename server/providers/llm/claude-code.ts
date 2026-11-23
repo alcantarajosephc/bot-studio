@@ -220,14 +220,34 @@ export class ClaudeCodeProvider implements LlmProvider {
     }
     const inner = envelope.result;
     const text = typeof inner === "string" ? inner : JSON.stringify(inner);
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      throw new Error("Claude Code returned a result that was not valid JSON.");
-    }
+    const parsed = extractJson(text);
+    if (parsed === undefined) throw new Error("Claude Code returned a result that was not valid JSON.");
     return schema.parse(parsed);
   }
+}
+
+/**
+ * Pull a JSON value out of the CLI's result text. `--json-schema` is meant to constrain the
+ * output, but a real model may still wrap it in a ```json fence or a sentence of prose, so we
+ * parse directly first, then retry on a fence's contents, then on the outermost {...}/[...] span.
+ * Returns undefined when nothing parses.
+ */
+function extractJson(text: string): unknown {
+  const candidates: string[] = [text.trim()];
+  const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) candidates.push(fence[1].trim());
+  const obj = text.match(/\{[\s\S]*\}/);
+  if (obj) candidates.push(obj[0]);
+  const arr = text.match(/\[[\s\S]*\]/);
+  if (arr) candidates.push(arr[0]);
+  for (const c of candidates) {
+    try {
+      return JSON.parse(c);
+    } catch {
+      // try the next candidate
+    }
+  }
+  return undefined;
 }
 
 // ----- readiness check (backs GET /api/claude-code/status) -----
