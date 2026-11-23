@@ -49,7 +49,7 @@ Each bot is its own worker with its own queue, status and log, so different bots
 | Bot | What it does | AI? |
 |---|---|---|
 | Thumbnail | Samples up to 40 frames, scores sharpness and exposure, keeps the best | No (ffmpeg) |
-| SEO Caption | Transcribes (Groq Whisper), then Claude writes the caption from your rules and style examples | Yes |
+| SEO Caption | Transcribes (local Whisper or Groq), then the writing model writes the caption from your rules and style examples | Yes |
 | Scheduler | Day presets, auto spread (under 10 videos share one day, 10+ spread out, up to 100 a day) or fixed times (up to 20 a day), per-video times, reorder, time zone | No |
 | Posting | Reports what's waiting. No platform connected | No |
 | Video Editor | Transcribes and finds pauses, Claude plans the edit by word index, code compiles exact cuts, Remotion renders 1080x1920 | Yes |
