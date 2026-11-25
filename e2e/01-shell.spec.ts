@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { clickNode, closeDrawer, drawer, openTab } from "./helpers";
 
-const NODES = ["drop", "thumbnail", "caption", "scheduler", "posting", "manager", "editor", "revision"];
+const NODES = ["drop", "thumbnail", "caption", "output", "scheduler", "posting", "manager", "editor", "revision"];
 const BOTS = ["Bot Manager", "Thumbnail Bot", "SEO Caption Bot", "Scheduler Bot", "Posting Bot", "Video Editor", "Review Bot"];
 
 test.beforeEach(async ({ page }) => {
@@ -74,11 +74,12 @@ test("the editor and review nodes jump to their pages", async ({ page }) => {
 });
 
 test("Tidy up puts moved nodes back", async ({ page }) => {
-  const node = page.locator('.react-flow__node[data-id="posting"]');
+  const node = page.locator('.react-flow__node[data-id="scheduler"]');
   const before = await node.boundingBox();
   await node.hover();
   await page.mouse.down();
-  await page.mouse.move(before!.x + 260, before!.y + 160, { steps: 8 });
+  // hover() grabs the node's center, so move relative to the center.
+  await page.mouse.move(before!.x + before!.width / 2 + 150, before!.y + before!.height / 2 + 60, { steps: 8 });
   await page.mouse.up();
   const moved = await node.boundingBox();
   expect(Math.abs(moved!.x - before!.x)).toBeGreaterThan(50);

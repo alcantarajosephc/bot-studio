@@ -4,6 +4,7 @@ import type { LiveState } from "../lib/live";
 import { api } from "../lib/api";
 import { Sprite } from "../components/Sprite";
 import { fmtTime } from "../lib/format";
+import { setupProblem } from "../lib/setup";
 
 function NewProject({ onCreated }: { onCreated: (id: string) => void }) {
   const [name, setName] = useState("");
@@ -184,7 +185,7 @@ export function EditorView({ live, onOpenReview }: { live: LiveState; onOpenRevi
           <p className="lede" style={{ margin: 0 }}>{(live.bots.editor?.status === "working" && live.bots.editor.detail) || "Drop a raw talking-head video. The editor cuts dead air and retakes, adds captions, callouts, screenshots and zooms."}</p>
         </div>
       </div>
-      {!live.settings?.keys.anthropic || !live.settings?.keys.groq ? <div className="banner" style={{ margin: "12px 0" }}>The editor needs a Groq key (to listen) and an Anthropic key (to plan the edit). Add them under Keys &amp; models.</div> : null}
+      {setupProblem(live.settings) ? <div className="banner" style={{ margin: "12px 0" }}>{setupProblem(live.settings)}</div> : null}
       <div className="split" style={{ marginTop: 16 }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <NewProject onCreated={setSelected} />

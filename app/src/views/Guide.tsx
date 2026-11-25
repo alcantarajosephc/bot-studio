@@ -16,7 +16,8 @@ function HowTo() {
       <ul>
         <li><b>Thumbnail Bot</b> samples frames and keeps the clearest, best-exposed one as the cover.</li>
         <li><b>SEO Caption Bot</b> transcribes the video and writes a caption built around likely search terms. Set language, keywords and hashtags in its panel, and teach it your style with past captions.</li>
-        <li><b>Scheduler Bot</b> assigns posting times from your settings. Small batches (under 10) share one day; bigger batches are spread across days.</li>
+        <li><b>Output folder</b>: each finished video is saved there as three files: the video, its cover (.jpg) and its caption (.txt). Choose the folder under Keys &amp; models; a Google Drive for desktop folder keeps everything synced.</li>
+        <li><b>Scheduler Bot</b> (optional, off by default) assigns posting times. Small batches (under 10) share one day; bigger batches are spread across days.</li>
         <li><b>Posting Bot</b> isn't connected to any platform yet. It keeps everything ready at the set times.</li>
         <li><b>Bot Manager</b> routes each video to the next step and keeps the log.</li>
       </ul>

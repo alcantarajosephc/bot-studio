@@ -3,13 +3,16 @@ import path from "node:path";
 import express, { type NextFunction, type Request, type Response } from "express";
 import multer from "multer";
 import type { BotSystem } from "./system.ts";
-import { loadBotMeta, paths, publicSettings, ROOT, updateSettings } from "./config.ts";
+import { getSettings, loadBotMeta, paths, publicSettings, ROOT, updateSettings } from "./config.ts";
+import { localOnly } from "./security.ts";
+import { checkSettingsUpdate } from "./settings-check.ts";
+import { openFolder, outputDir, writeCaptionFile } from "./bots/output.ts";
 import { deleteTraining, extractTrainingText, listTraining, saveTraining } from "./bots/caption.ts";
 import { VIDEO_EXT } from "./bots/manager.ts";
 import { checkClaudeCode } from "./providers/llm/claude-code.ts";
 
 /** Top-level settings keys a client is allowed to persist. Anything else in the body is dropped. */
-const SETTINGS_FIELDS = ["keys", "clearKeys", "llm", "transcription", "captionRules", "schedule", "running"] as const;
+const SETTINGS_FIELDS = ["keys", "clearKeys", "llm", "transcription", "captionRules", "schedule", "output", "running"] as const;
 
 type Handler = (req: Request, res: Response) => unknown;
 const wrap = (fn: Handler) => (req: Request, res: Response, next: NextFunction) => {
@@ -19,6 +22,7 @@ const wrap = (fn: Handler) => (req: Request, res: Response, next: NextFunction) 
 export function createApp(sys: BotSystem) {
   const { ctx, manager, editor } = sys;
   const app = express();
+  app.use(localOnly);
   const upload = multer({ dest: paths.tmp, limits: { fileSize: 4 * 1024 * 1024 * 1024 } });
   app.use(express.json({ limit: "2mb" }));
 
@@ -75,7 +79,10 @@ export function createApp(sys: BotSystem) {
     const v = ctx.store.video(String(req.params.id));
     if (!v) return res.status(404).json({ error: "Not found" });
     const patch: Parameters<typeof ctx.store.updateVideo>[1] = {};
-    if (typeof req.body.captionText === "string" && v.caption) patch.caption = { ...v.caption, text: req.body.captionText };
+    if (typeof req.body.captionText === "string" && v.caption) {
+      patch.caption = { ...v.caption, text: req.body.captionText };
+      if (v.output) writeCaptionFile(v.output.folder, v.output.base, req.body.captionText);
+    }
     if (req.body.schedule === null) patch.schedule = undefined;
     else if (req.body.schedule?.at) patch.schedule = { at: new Date(req.body.schedule.at).toISOString(), manual: true };
     if (patch.schedule && v.stage === "captioned") patch.stage = "scheduled";
@@ -112,6 +119,12 @@ export function createApp(sys: BotSystem) {
     res.json({ ok: true });
   });
 
+  // ----- output folder -----
+  app.post("/api/output/open", wrap(async (_req, res) => {
+    await openFolder(outputDir());
+    res.json({ ok: true });
+  }));
+
   // ----- settings -----
   app.get("/api/settings", (_req, res) => res.json(publicSettings()));
   app.get("/api/claude-code/status", (_req, res) => res.json({ status: checkClaudeCode() }));
@@ -131,9 +144,15 @@ export function createApp(sys: BotSystem) {
     delete body.keys;
     delete body.clearKeys;
     if (Object.keys(keys).length) body.keys = keys;
-    const schedule = body.schedule as { times?: unknown[] } | undefined;
-    if (Array.isArray(schedule?.times)) schedule.times = schedule.times.slice(0, 20);
+    try {
+      checkSettingsUpdate(body, getSettings());
+    } catch (e) {
+      return res.status(400).json({ error: (e as Error).message });
+    }
+    const wasScheduling = getSettings().output.scheduling;
     updateSettings(body);
+    const isScheduling = getSettings().output.scheduling;
+    if (wasScheduling !== isScheduling) manager.setScheduling(isScheduling);
     const s = publicSettings();
     ctx.bus.emit({ type: "settings", settings: s });
     res.json(s);

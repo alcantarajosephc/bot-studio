@@ -2,12 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } fro
 import { ReactFlow, Background, Handle, Position, useNodesInitialized, useReactFlow, type Edge, type Node, type NodeProps, type OnNodesChange } from "@xyflow/react";
 import type { BotMeta, BotState } from "../../../shared/types";
 import type { LiveState } from "../lib/live";
-import { uploadVideos } from "../lib/api";
+import { api, uploadVideos } from "../lib/api";
 import { Sprite } from "../components/Sprite";
 import { BotLog, StatusRows } from "../components/BotLog";
 import { fmtSlot } from "../lib/format";
 
-type Kind = "drop" | "thumbnail" | "caption" | "scheduler" | "posting" | "manager" | "editor" | "revision";
+type Kind = "drop" | "thumbnail" | "caption" | "output" | "scheduler" | "posting" | "manager" | "editor" | "revision";
 type BotNodeData = { kind: Kind; live: LiveState; meta?: BotMeta; state?: BotState; onOpen: (id: string) => void };
 type BotNode = Node<BotNodeData, "bot">;
 
@@ -15,13 +15,15 @@ const DEFAULT_POS: Record<Kind, { x: number; y: number }> = {
   drop: { x: 0, y: 40 },
   thumbnail: { x: 270, y: 40 },
   caption: { x: 540, y: 40 },
-  scheduler: { x: 810, y: 40 },
-  posting: { x: 540, y: 300 },
+  output: { x: 810, y: 40 },
+  scheduler: { x: 540, y: 300 },
   manager: { x: 810, y: 300 },
+  posting: { x: 1080, y: 300 },
   editor: { x: 0, y: 520 },
   revision: { x: 270, y: 520 },
 };
-const POS_KEY = "bots.canvas.positions";
+// v2: the output node was added and the scheduling row moved, so old saved positions are ignored.
+const POS_KEY = "bots.canvas.positions.v2";
 
 function loadPositions(): Record<string, { x: number; y: number }> {
   try {
@@ -38,7 +40,7 @@ function savePositions(p: Record<string, { x: number; y: number }>) {
   }
 }
 
-const ICON: Record<Kind, string> = { drop: "📥", thumbnail: "🖼️", caption: "📝", scheduler: "📅", posting: "📤", manager: "🧭", editor: "🎬", revision: "🔁" };
+const ICON: Record<Kind, string> = { drop: "📥", thumbnail: "🖼️", caption: "📝", output: "📁", scheduler: "📅", posting: "📤", manager: "🧭", editor: "🎬", revision: "🔁" };
 
 function DropBody({ live }: { live: LiveState }) {
   const [over, setOver] = useState(false);
@@ -95,7 +97,7 @@ function DropBody({ live }: { live: LiveState }) {
       </div>
       <div className="chips">
         {recent.map((v) => (
-          <span key={v.id} className={`chip ${v.stage === "error" ? "chip-red" : v.stage === "scheduled" ? "chip-green" : ""}`} title={v.error ?? v.stage}>
+          <span key={v.id} className={`chip ${v.stage === "error" ? "chip-red" : v.stage === "scheduled" || v.stage === "done" ? "chip-green" : ""}`} title={v.error ?? v.stage}>
             {v.originalName}
           </span>
         ))}
@@ -141,6 +143,28 @@ function NodeBody({ data }: { data: BotNodeData }) {
         </div>
       ) : null;
     }
+    case "output": {
+      const saved = live.videos.filter((v) => v.output).length;
+      const dir = live.settings?.outputDir ?? "";
+      const short = dir.length > 30 ? `…${dir.slice(-29)}` : dir;
+      return (
+        <>
+          <span className="node-detail" title={dir}>{short}</span>
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <span className={`chip ${saved ? "chip-green" : ""}`}>{saved} saved</span>
+            <button
+              className="btn btn-sm nodrag"
+              onClick={(e) => {
+                e.stopPropagation();
+                void api.post("/api/output/open");
+              }}
+            >
+              Open folder
+            </button>
+          </div>
+        </>
+      );
+    }
     case "posting":
       return (
         <div className="row" style={{ justifyContent: "space-between" }}>
@@ -169,11 +193,11 @@ function NodeBody({ data }: { data: BotNodeData }) {
 function BotNodeView({ data }: NodeProps<BotNode>) {
   const { kind, meta, state } = data;
   const status = state?.status ?? "idle";
-  const title = kind === "drop" ? "Drop videos" : (meta?.name ?? kind);
-  const sub = kind === "drop" ? "Input" : (meta?.tagline ?? "");
+  const title = kind === "drop" ? "Drop videos" : kind === "output" ? "Output folder" : (meta?.name ?? kind);
+  const sub = kind === "drop" ? "Input" : kind === "output" ? "Video, cover and caption" : (meta?.tagline ?? "");
   return (
-    <div className={`node ${kind === "drop" ? "" : status}`} style={{ position: "relative" }}>
-      {kind !== "drop" && (status === "working" || status === "error") ? <span className={`status-tag ${status}`}>{status === "working" ? "Working" : "Error"}</span> : null}
+    <div className={`node ${meta ? status : ""} ${kind === "output" ? "node-output" : ""}`} style={{ position: "relative" }}>
+      {meta && (status === "working" || status === "error") ? <span className={`status-tag ${status}`}>{status === "working" ? "Working" : "Error"}</span> : null}
       <Handle type="target" position={Position.Left} id="l" style={{ opacity: 0 }} />
       <Handle type="target" position={Position.Top} id="t" style={{ opacity: 0 }} />
       <Handle type="target" position={Position.Right} id="rt" style={{ opacity: 0 }} />
@@ -187,7 +211,7 @@ function BotNodeView({ data }: NodeProps<BotNode>) {
       </div>
       <div className="node-body">
         <NodeBody data={data} />
-        {kind !== "drop" && state?.detail && status !== "idle" ? <div className="node-detail" title={state.detail}>{state.detail}</div> : null}
+        {meta && state?.detail && status !== "idle" ? <div className="node-detail" title={state.detail}>{state.detail}</div> : null}
       </div>
       <Handle type="source" position={Position.Right} id="r" style={{ opacity: 0 }} />
       <Handle type="source" position={Position.Bottom} id="b" style={{ opacity: 0 }} />
@@ -215,9 +239,10 @@ function FitWhenReady() {
 const EDGES: [Kind, Kind, string, string][] = [
   ["drop", "thumbnail", "r", "l"],
   ["thumbnail", "caption", "r", "l"],
-  ["caption", "scheduler", "r", "l"],
-  ["scheduler", "manager", "b", "t"],
-  ["manager", "posting", "ls", "rt"],
+  ["caption", "output", "r", "l"],
+  ["caption", "scheduler", "b", "t"],
+  ["scheduler", "manager", "r", "l"],
+  ["manager", "posting", "r", "l"],
   ["editor", "revision", "r", "l"],
 ];
 
@@ -236,8 +261,11 @@ export function CanvasView({ live, onOpenBot }: { live: LiveState; onOpenBot: (i
     [rfNodes, live, metaById, open],
   );
 
+  const scheduling = live.settings?.output.scheduling ?? false;
   const edges: Edge[] = EDGES.map(([s, t, sh, th]) => {
     const active = live.bots[s]?.status === "working" || live.bots[t]?.status === "working";
+    // The scheduling row only matters when scheduling is on.
+    const offPath = !scheduling && ["scheduler", "manager", "posting"].includes(t);
     return {
       id: `${s}-${t}`,
       source: s,
@@ -245,7 +273,12 @@ export function CanvasView({ live, onOpenBot }: { live: LiveState; onOpenBot: (i
       sourceHandle: sh,
       targetHandle: th,
       animated: active,
-      style: { stroke: active ? "#3cc78a" : t === "posting" ? "#5a4a2a" : "#4a4d5a", strokeWidth: 2, strokeDasharray: t === "posting" ? "5 5" : undefined },
+      style: {
+        stroke: active ? "#3cc78a" : t === "posting" ? "#5a4a2a" : "#4a4d5a",
+        strokeWidth: 2,
+        strokeDasharray: t === "posting" || offPath ? "5 5" : undefined,
+        opacity: offPath ? 0.4 : 1,
+      },
     };
   });
 
@@ -272,7 +305,7 @@ export function CanvasView({ live, onOpenBot }: { live: LiveState; onOpenBot: (i
     <div className="canvas-wrap">
       <div className="flow">
         <div className="flow-head">
-        <div className="crumb">Pipeline · videos flow left to right · editing lane at the bottom</div>
+        <div className="crumb">Pipeline · videos flow left to right into the output folder{scheduling ? " · scheduling on" : " · scheduling off"} · editing lane at the bottom</div>
         <div className="flow-tools">
           <button
             className="btn btn-sm"

@@ -105,7 +105,7 @@ export function planSchedule(videos: { id: string; manualAt?: string }[], s: Sch
 export async function schedulerJob(ctx: BotContext): Promise<number> {
   const bot = ctx.bots.scheduler;
   const s = getSettings().schedule;
-  const videos = ctx.store.videos().filter((v) => v.stage === "captioned" || v.stage === "scheduled");
+  const videos = ctx.store.videos().filter((v) => v.stage === "captioned" || v.stage === "scheduled" || v.stage === "done");
   if (!videos.length) return 0;
   bot.setStatus("working", `Picking times for ${videos.length} video${videos.length > 1 ? "s" : ""}`);
   const plan = planSchedule(

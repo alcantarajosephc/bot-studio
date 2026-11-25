@@ -63,6 +63,8 @@ export type VideoStage =
   | "captioning"
   | "captioned"
   | "scheduled"
+  /** Saved to the output folder (scheduling off). */
+  | "done"
   | "error";
 
 export interface VideoRecord {
@@ -78,6 +80,8 @@ export interface VideoRecord {
   transcript?: Transcript;
   caption?: { text: string; caption: string; keywords: string[]; hashtags: string[]; language: string };
   schedule?: { at: string; manual: boolean };
+  /** Where its video, cover and caption were saved, e.g. { folder: "D:\\Output", base: "tips-part1" }. */
+  output?: { folder: string; base: string };
   error?: string;
 }
 
@@ -116,11 +120,17 @@ export interface Settings {
   transcription: { provider: "groq" | "local"; language: "auto" | "en" | "tl"; groqModel: string; localModel: string };
   captionRules: CaptionRules;
   schedule: ScheduleSettings;
+  /** folder: "" means data/output. scheduling: off = finished videos just go to the folder. */
+  output: { folder: string; scheduling: boolean };
   running: boolean;
 }
 
 /** Settings as sent to the browser: keys are masked. */
-export type PublicSettings = Omit<Settings, "keys"> & { keys: { anthropic: boolean; groq: boolean } };
+export type PublicSettings = Omit<Settings, "keys"> & {
+  keys: { anthropic: boolean; groq: boolean };
+  /** The folder finished videos are saved to, fully resolved. */
+  outputDir: string;
+};
 
 /** Result of the Claude Code CLI readiness check (GET /api/claude-code/status). */
 export type ClaudeCodeStatus = "checking" | "ok" | "not-found" | "not-signed-in";

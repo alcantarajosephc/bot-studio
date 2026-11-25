@@ -16,6 +16,9 @@ const transcriber = new FakeTranscriber({ text: "today I will show you how to gr
 
 beforeAll(async () => {
   await freshDataDir();
+  // These tests cover the scheduling flow, which is optional (off by default).
+  const { updateSettings } = await import("../server/config.ts");
+  updateSettings({ output: { scheduling: true } });
   videoFile = await makeTestVideo(tempDir());
   const { createBotSystem } = await import("../server/system.ts");
   const { createApp } = await import("../server/app.ts");

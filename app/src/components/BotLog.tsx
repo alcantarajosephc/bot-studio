@@ -52,7 +52,7 @@ export function StatusRows({ live, onOpen }: { live: LiveState; onOpen: (id: str
             <span className="role">{m.role}</span>
             <span className="detail">{s?.detail ?? ""}</span>
             {s?.queue ? <span className="pill">{s.queue} queued</span> : null}
-            <span className={`pill ${status}`}>{status === "off" ? "not connected" : status}</span>
+            <span className={`pill ${status}`}>{status === "off" ? (m.disabled ? "not connected" : "off") : status}</span>
           </div>
         );
       })}

@@ -48,6 +48,16 @@ test("editing a caption by hand", async ({ page }) => {
   expect(videos[0].caption?.text).toBe("My own caption #handmade");
 });
 
+test("scheduling is off by default and can be turned on from its panel", async ({ page }) => {
+  await clickNode(page, "scheduler");
+  const d = drawer(page);
+  await expect(d).toContainText("Scheduling is off.");
+  await d.getByRole("button", { name: "Turn on scheduling" }).click();
+  await expect(d.getByRole("button", { name: "Pick the times" })).toBeVisible();
+  // Saved videos now get posting times.
+  await expect.poll(async () => (await api<{ videos: VideoRecord[] }>(page, "/api/state")).videos.every((v) => v.stage === "scheduled")).toBe(true);
+});
+
 test("scheduler: picked times reschedule every video", async ({ page }) => {
   await clickNode(page, "scheduler");
   const d = drawer(page);

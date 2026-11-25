@@ -18,6 +18,7 @@ export const paths = {
   get training() { return path.join(dataDir(), "training"); },
   get editor() { return path.join(dataDir(), "editor"); },
   get tmp() { return path.join(dataDir(), "tmp"); },
+  get output() { return path.join(dataDir(), "output"); },
   get settings() { return path.join(dataDir(), "settings.json"); },
   get db() { return path.join(dataDir(), "db.json"); },
 };
@@ -54,6 +55,7 @@ export const DEFAULT_SETTINGS: Settings = {
     perDay: 3,
     timezone: "Asia/Manila",
   },
+  output: { folder: "", scheduling: false },
   running: false,
 };
 
@@ -103,5 +105,9 @@ export function apiKey(name: "anthropic" | "groq"): string {
 }
 
 export function publicSettings(s: Settings = getSettings()): PublicSettings {
-  return { ...s, keys: { anthropic: Boolean(apiKey("anthropic")), groq: Boolean(apiKey("groq")) } };
+  return {
+    ...s,
+    keys: { anthropic: Boolean(apiKey("anthropic")), groq: Boolean(apiKey("groq")) },
+    outputDir: s.output.folder.trim() || paths.output,
+  };
 }

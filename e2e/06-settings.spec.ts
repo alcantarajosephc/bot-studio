@@ -10,7 +10,7 @@ test("fresh install defaults to the keyless combo with no key warnings", async (
   await page.goto("/#settings");
   // Claude Code is the default writing model, local Whisper the default listening model.
   await expect(page.getByLabel("Writing model")).toHaveValue("claude-code");
-  await expect(page.getByLabel("Listening")).toHaveValue("local");
+  await expect(page.locator("label.field", { hasText: /^Listening/ }).locator("select")).toHaveValue("local");
   // The Claude Code status row is shown (CLI is faked as signed in for the e2e server).
   await expect(page.getByText(/Claude Code: ✓ signed in/)).toBeVisible();
   // No red "missing" key warnings for the keyless combo, and no needs-attention dot.
@@ -30,7 +30,7 @@ test("switching the writing model brings back the relevant key warning", async (
 
   // Listening = Groq Whisper also needs a Groq key.
   await page.getByLabel("Writing model").selectOption("claude-code");
-  await page.getByLabel("Listening").selectOption("groq");
+  await page.locator("label.field", { hasText: /^Listening/ }).locator("select").selectOption("groq");
   await expect(page.getByText(/Groq API key.*missing/)).toBeVisible();
   await expect(page.getByText(/Claude Code: ✓ signed in/)).toBeVisible();
 });

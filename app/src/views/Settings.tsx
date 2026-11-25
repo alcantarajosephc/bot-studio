@@ -117,8 +117,58 @@ export function SettingsView({ live }: { live: LiveState }) {
             <span className="ok">{msg}</span>
           </div>
         </div>
+
+        <OutputSettings s={s} />
       </div>
     </div>
+  );
+}
+
+/** Where finished videos go, and whether to also pick posting times. */
+export function OutputSettings({ s }: { s: PublicSettings }) {
+  const [folder, setFolder] = useState(s.output.folder);
+  const [scheduling, setScheduling] = useState(s.output.scheduling);
+  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  useEffect(() => {
+    setFolder(s.output.folder);
+    setScheduling(s.output.scheduling);
+  }, [s.output.folder, s.output.scheduling]);
+  const dirty = folder.trim() !== s.output.folder || scheduling !== s.output.scheduling;
+
+  const save = async () => {
+    try {
+      await api.put<PublicSettings>("/api/settings", { output: { folder: folder.trim(), scheduling } });
+      setMsg({ text: "Saved.", ok: true });
+      setTimeout(() => setMsg(null), 2000);
+    } catch (e) {
+      setMsg({ text: (e as Error).message, ok: false });
+    }
+  };
+
+  return (
+    <section style={{ marginTop: 28 }}>
+      <h2 style={{ fontSize: 17, margin: "0 0 4px" }}>Output</h2>
+      <p className="lede">Finished videos are saved here as three files each: the video, its cover (.jpg) and its caption (.txt). Edited videos from the Video editor land here too. Nothing is posted anywhere.</p>
+      <div className="card" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <label className="field">
+          Output folder (leave empty for the default)
+          <input className="input" value={folder} onChange={(e) => setFolder(e.target.value)} placeholder={s.outputDir} spellCheck={false} />
+        </label>
+        <div className="row">
+          <span className="hint">Saving to: <code>{s.outputDir}</code></span>
+          <button className="btn btn-sm" onClick={() => api.post("/api/output/open").catch((e: Error) => setMsg({ text: e.message, ok: false }))}>Open folder</button>
+        </div>
+        <span className="hint">Tip: to keep everything in Google Drive, install Google Drive for desktop and use a folder inside it, e.g. <code>G:\My Drive\Bot Studio</code>.</span>
+        <label className="row" style={{ gap: 8 }}>
+          <input type="checkbox" checked={scheduling} onChange={(e) => setScheduling(e.target.checked)} />
+          <span>Also pick posting times <span className="hint">(optional; the Scheduler Bot stays off when this is unticked)</span></span>
+        </label>
+        <div className="row">
+          <button className="btn btn-yellow" disabled={!dirty} onClick={save}>Save output settings</button>
+          {msg ? <span className={msg.ok ? "ok" : "err"}>{msg.text}</span> : null}
+        </div>
+      </div>
+    </section>
   );
 }
 

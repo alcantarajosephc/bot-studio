@@ -82,6 +82,7 @@ a { color: var(--yellow); }
 .node.working { border-color: rgba(60, 199, 138, 0.8); box-shadow: 0 0 0 3px rgba(60, 199, 138, 0.15); }
 .node.error { border-color: rgba(255, 93, 115, 0.8); }
 .node.off { opacity: 0.7; }
+.node-output { border-color: rgba(60, 199, 138, 0.45); }
 .node-head { display: flex; align-items: center; gap: 9px; }
 .node-icon { width: 28px; height: 28px; border-radius: 8px; background: var(--panel-3); display: grid; place-items: center; font-size: 15px; flex: none; }
 .node-title { font-weight: 700; font-size: 13px; line-height: 1.2; }

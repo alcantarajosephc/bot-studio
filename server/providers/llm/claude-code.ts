@@ -11,8 +11,9 @@ import type { GenerateObjectOptions, LlmProvider } from "./types.ts";
  * so captions and edit plans run against the user's Claude login instead of an API key.
  *
  * Security: the executable is resolved from the environment only (never from Settings),
- * the untrusted prompt/transcript goes over stdin (never the command line), tools are
- * denied, API-key env vars are stripped, and the child runs in a throwaway empty folder.
+ * the untrusted prompt/transcript goes over stdin (never the command line), all tools are
+ * removed (`--tools ""`), the user's own settings/hooks/CLAUDE.md are not loaded, sessions
+ * are not saved, API-key env vars are stripped, and the child runs in a throwaway empty folder.
  */
 
 /** How we invoke the CLI: either the binary directly, or `node cli.js` on Windows/for .js overrides. */
@@ -104,16 +105,20 @@ function cliFromShim(shimPath: string): string | null {
  * asserted in tests. The prompt is NOT here — it goes over stdin.
  */
 export function buildClaudeArgs(
-  opts: Pick<GenerateObjectOptions<unknown>, "system">,
-  files: { schemaFile: string; mcpConfigFile: string },
+  opts: Pick<GenerateObjectOptions<unknown>, "effort">,
+  files: { schemaJson: string; systemFile: string; mcpConfigFile: string },
   model: string,
 ): string[] {
-  const args = ["-p", "--output-format", "json", "--system-prompt", opts.system];
+  // The system prompt goes in a file: caption training text can push it past Windows' ~32K command-line limit.
+  const args = ["-p", "--output-format", "json", "--system-prompt-file", files.systemFile];
   if (model.trim()) args.push("--model", model.trim());
-  args.push("--json-schema", files.schemaFile);
-  // Deny all tools: this call only needs text in, JSON out. Belt and suspenders against
-  // prompt injection from untrusted transcripts.
-  args.push("--allowedTools", "");
+  if (opts.effort) args.push("--effort", opts.effort);
+  // The CLI takes the schema itself as JSON text (a file path is rejected).
+  args.push("--json-schema", files.schemaJson);
+  // No tools at all: this call only needs text in, JSON out, and transcripts are untrusted.
+  args.push("--tools", "");
+  // Don't pull in the user's own settings, hooks or CLAUDE.md, and don't save every call as a session.
+  args.push("--setting-sources", "", "--no-session-persistence");
   args.push("--strict-mcp-config", "--mcp-config", files.mcpConfigFile);
   return args;
 }
@@ -139,30 +144,52 @@ function killTree(pid: number): void {
   }
 }
 
-/** True when the CLI's failure looks like a login/auth problem rather than a transient error. */
+/** True when the CLI's failure is specifically a login/auth problem. Kept narrow so other errors aren't mislabeled. */
 function looksNotSignedIn(text: string): boolean {
-  return /log ?in|logged out|not authenticat|unauthori[sz]|sign ?in|credential|invalid api key|please run \/login|401/i.test(text);
+  return /please run \/login|not logged in|logged out|not authenticated|invalid api key|authentication_error|oauth token (has )?expired|api error: 401/i.test(text);
+}
+
+/**
+ * The CLI reports most failures (old version, usage limits, bad model name) as a JSON result
+ * on stdout with is_error=true, sometimes with exit code 1. Pull that message out so the user
+ * sees the real, actionable reason. Returns null when stdout isn't such an envelope.
+ */
+function cliErrorMessage(stdout: string): string | null {
+  let env: { is_error?: boolean; result?: unknown };
+  try {
+    env = JSON.parse(stdout);
+  } catch {
+    return null;
+  }
+  if (!env?.is_error || typeof env.result !== "string" || !env.result.trim()) return null;
+  if (looksNotSignedIn(env.result)) return NOT_SIGNED_IN_MESSAGE;
+  const msg = env.result.replace(/\s+/g, " ").trim();
+  return `Claude Code: ${msg.length > 300 ? `${msg.slice(0, 300)}…` : msg}`;
 }
 
 export class ClaudeCodeProvider implements LlmProvider {
   readonly name = "claude-code";
 
-  constructor(private model = "claude-opus-5-5", private timeoutMs = 120_000) {}
+  // Edit plans for longer videos can take several minutes at high effort.
+  constructor(private model = "claude-opus-5-5", private timeoutMs = 600_000) {}
 
   async generateObject<T>(opts: GenerateObjectOptions<T>): Promise<T> {
     const resolved = resolveClaudeCommand();
     if (!resolved) throw new Error(NOT_FOUND_MESSAGE);
 
     const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "claude-code-"));
-    const schemaFile = path.join(workDir, "schema.json");
+    const systemFile = path.join(workDir, "system.md");
     const mcpConfigFile = path.join(workDir, "mcp.json");
     const cwd = path.join(workDir, "cwd");
     try {
-      fs.writeFileSync(schemaFile, JSON.stringify(z.toJSONSchema(opts.schema)));
+      // The CLI silently ignores a schema that carries a "$schema" key (the model then answers in prose), so drop it.
+      const { $schema: _draft, ...schema } = z.toJSONSchema(opts.schema) as Record<string, unknown>;
+      const schemaJson = JSON.stringify(schema);
+      fs.writeFileSync(systemFile, opts.system);
       fs.writeFileSync(mcpConfigFile, JSON.stringify({ mcpServers: {} }));
       fs.mkdirSync(cwd, { recursive: true });
 
-      const args = [...resolved.prefixArgs, ...buildClaudeArgs(opts, { schemaFile, mcpConfigFile }, this.model)];
+      const args = [...resolved.prefixArgs, ...buildClaudeArgs(opts, { schemaJson, systemFile, mcpConfigFile }, this.model)];
       const raw = await this.spawnClaude(resolved.command, args, opts.prompt, cwd);
       return this.parseResult(raw, opts.schema);
     } finally {
@@ -193,6 +220,8 @@ export class ClaudeCodeProvider implements LlmProvider {
         clearTimeout(timer);
         if (timedOut) return reject(new Error(`Claude Code CLI timed out after ${this.timeoutMs}ms.`));
         if (code !== 0) {
+          const reported = cliErrorMessage(stdout);
+          if (reported) return reject(new Error(reported));
           if (looksNotSignedIn(`${stderr}\n${stdout}`)) return reject(new Error(NOT_SIGNED_IN_MESSAGE));
           // Don't echo raw stderr verbatim; it can carry home/config paths or token details.
           return reject(new Error(`Claude Code CLI exited with code ${code}.`));
@@ -208,15 +237,18 @@ export class ClaudeCodeProvider implements LlmProvider {
   }
 
   private parseResult<T>(raw: string, schema: z.ZodType<T>): T {
-    let envelope: { is_error?: boolean; result?: unknown; subtype?: string };
+    let envelope: { is_error?: boolean; result?: unknown; subtype?: string; structured_output?: unknown };
     try {
       envelope = JSON.parse(raw);
     } catch {
       throw new Error("Claude Code returned output that was not valid JSON.");
     }
     if (envelope.is_error) {
-      if (typeof envelope.result === "string" && looksNotSignedIn(envelope.result)) throw new Error(NOT_SIGNED_IN_MESSAGE);
-      throw new Error("Claude Code reported an error while generating the result.");
+      throw new Error(cliErrorMessage(raw) ?? "Claude Code reported an error while generating the result.");
+    }
+    // With --json-schema the CLI hands back the already-parsed object here.
+    if (envelope.structured_output !== undefined && envelope.structured_output !== null) {
+      return schema.parse(envelope.structured_output);
     }
     const inner = envelope.result;
     const text = typeof inner === "string" ? inner : JSON.stringify(inner);

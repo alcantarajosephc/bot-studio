@@ -9,6 +9,7 @@ import { thumbnailJob } from "./thumbnail.ts";
 import { captionJob } from "./caption.ts";
 import { schedulerJob } from "./scheduler.ts";
 import { postingJob } from "./posting.ts";
+import { exportVideo } from "./output.ts";
 
 const PIPELINE = ["thumbnail", "caption", "scheduler", "posting"];
 
@@ -98,6 +99,8 @@ export class Manager {
           run: async () => {
             try {
               await captionJob(this.ctx, id);
+              await exportVideo(this.ctx, id);
+              if (!getSettings().output.scheduling) this.ctx.store.updateVideo(id, { stage: "done" });
             } catch (e) {
               this.fail(id, e);
             } finally {
@@ -122,6 +125,7 @@ export class Manager {
   }
 
   private scheduleIfIdle(): void {
+    if (!getSettings().output.scheduling) return;
     const { thumbnail, caption, scheduler } = this.ctx.bots;
     if (thumbnail.pending > 0 || caption.pending > 0 || this.scheduleQueued) return;
     this.scheduleQueued = true;
@@ -134,6 +138,22 @@ export class Manager {
         this.updateStatus();
       },
     });
+  }
+
+  /** Scheduling switched on or off in Settings. */
+  setScheduling(on: boolean): void {
+    const scheduler = this.ctx.bots.scheduler;
+    if (on) {
+      scheduler.setStatus("idle", "Ready to pick times");
+      this.requestSchedule();
+      return;
+    }
+    // Off: finished videos just live in the output folder, with no posting times.
+    for (const v of this.ctx.store.videos()) {
+      if (v.stage === "scheduled" || v.stage === "captioned") this.ctx.store.updateVideo(v.id, { stage: "done", schedule: undefined });
+    }
+    scheduler.setStatus("off", "Scheduling is off");
+    this.ctx.bots.posting.setStatus("off", "Not connected yet");
   }
 
   /** "Run everything": every new or failed video goes through, and anything captioned gets scheduled. */

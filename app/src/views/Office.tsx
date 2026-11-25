@@ -176,7 +176,7 @@ function drawRoom(g: G, now: Date, scheduled: number) {
     g.translate((p.x + q.x) / 2, (p.y + q.y) / 2 - 26);
     g.transform(1, 0.5, 0, 1, 0, 0);
     g.textAlign = "center";
-    g.fillText("SCHEDULED", 0, 0);
+    g.fillText("FINISHED", 0, 0);
     g.font = "bold 9px monospace";
     g.fillStyle = "#e0457b";
     g.fillText(String(scheduled), 0, 10);
@@ -380,7 +380,8 @@ export function OfficeView({ live, onOpenBot }: { live: LiveState; onOpenBot: (i
       for (const id in statusNow) prevStatus[id] = statusNow[id];
 
       // Celebration: the whiteboard counter ticking up is a finished batch.
-      const scheduled = L.videos.filter((v) => v.stage === "scheduled").length;
+      // Finished = saved to the output folder or scheduled, so both modes celebrate.
+      const scheduled = L.videos.filter((v) => v.stage === "scheduled" || v.stage === "done").length;
       if (prevScheduled >= 0 && scheduled > prevScheduled) {
         hopUntil = t + 1200;
         for (let i = 0; i < 40; i++) {

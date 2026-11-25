@@ -8,6 +8,7 @@ import { detectSilences, extractAudio, probe } from "../../media/ffmpeg.ts";
 import { compileTimeline, outputToSource } from "./compile.ts";
 import { buildEditPrompt, buildRevisePrompt, EditPlanSchema, nearestWord, parseNotes } from "./plan.ts";
 import { renderTimeline } from "./render.ts";
+import { exportEdit } from "../output.ts";
 
 export const ASSET_EXT = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".mp4", ".mov", ".webm"]);
 const FPS = 30;
@@ -209,6 +210,12 @@ export class Editor {
       ver.durationSec = timeline.durationInFrames / timeline.fps;
     });
     bot.log(`${p.name} v${v} is ready (${(timeline.durationInFrames / timeline.fps).toFixed(1)}s, was ${(p.sourceDuration ?? info.duration).toFixed(1)}s).`);
+    try {
+      await exportEdit(this.ctx, p.name, v, path.join(this.dir(id), file));
+    } catch (e) {
+      // The render itself succeeded; only the copy failed, so don't mark the version as failed.
+      bot.log(`Could not copy ${p.name} v${v} to the output folder: ${(e as Error).message}`, "error");
+    }
   }
 
   readTimeline(id: string, v: number): Timeline | null {

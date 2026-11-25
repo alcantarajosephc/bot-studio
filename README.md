@@ -6,7 +6,9 @@ Posting to platforms isn't connected yet.
 
 ## Run it
 
-Needs Node 20+ and ffmpeg (`winget install Gyan.FFmpeg`).
+Needs Node 20.12+ and ffmpeg (`winget install Gyan.FFmpeg`).
+
+**First run downloads a few things once:** the Whisper speech model (about 460 MB for the default `small` model), a headless browser for rendering videos (about 120 MB), and the caption font (needs internet when rendering). The first caption and the first edit are slower because of this.
 
 ```powershell
 npm install
@@ -33,6 +35,20 @@ If the CLI isn't on your PATH, set the `CLAUDE_CODE_PATH` environment variable t
 
 Add videos on the **Drop videos** node, or copy them into `data/inbox/`. Then press **Run everything**, or turn on **Running**.
 
+### Where the results go
+
+Each finished video is saved to the **output folder** as three files side by side, named after the original video:
+
+```
+tips-part1.mp4   the video
+tips-part1.jpg   its cover
+tips-part1.txt   its caption + hashtags
+```
+
+Edited videos from the Video editor land there too (`My edit v2.mp4`). The default folder is `data/output`; change it under **Keys & models → Output**. To keep everything in Google Drive, install Google Drive for desktop and pick a folder inside it (e.g. `G:\My Drive\Bot Studio`). Nothing is ever posted to social media.
+
+Picking posting times is optional and **off by default**. Turn it on under **Keys & models → Output**, or from the Scheduler Bot's panel.
+
 ### Quick demo with no CLI at all
 
 `npx tsx tests/demo-server.ts` runs the app with a stand-in writing model and local Whisper (`pip install openai-whisper`), so you can click around without even the Claude Code CLI. Its data goes to `data-demo/`.
@@ -40,7 +56,8 @@ Add videos on the **Drop videos** node, or copy them into `data/inbox/`. Then pr
 ## How it works
 
 ```
-Drop videos -> Thumbnail Bot -> SEO Caption Bot -> Scheduler Bot -> Bot Manager -> Posting Bot (not connected)
+Drop videos -> Thumbnail Bot -> SEO Caption Bot -> Output folder
+                                       -> Scheduler Bot -> Bot Manager -> Posting Bot (optional; posting not connected)
 Video Editor -> Review Bot
 ```
 
@@ -50,7 +67,7 @@ Each bot is its own worker with its own queue, status and log, so different bots
 |---|---|---|
 | Thumbnail | Samples up to 40 frames, scores sharpness and exposure, keeps the best | No (ffmpeg) |
 | SEO Caption | Transcribes (local Whisper or Groq), then the writing model writes the caption from your rules and style examples | Yes |
-| Scheduler | Day presets, auto spread (under 10 videos share one day, 10+ spread out, up to 100 a day) or fixed times (up to 20 a day), per-video times, reorder, time zone | No |
+| Scheduler (optional, off by default) | Day presets, auto spread (under 10 videos share one day, 10+ spread out, up to 100 a day) or fixed times (up to 20 a day), per-video times, reorder, time zone | No |
 | Posting | Reports what's waiting. No platform connected | No |
 | Video Editor | Transcribes and finds pauses, Claude plans the edit by word index, code compiles exact cuts, Remotion renders 1080x1920 | Yes |
 | Review | Timestamped notes are mapped back to source words, Claude revises the plan, the editor renders the next version | Yes |
@@ -70,13 +87,14 @@ Each bot is its own worker with its own queue, status and log, so different bots
 | Video look (fonts, colors, caption size and position) | `editor-remotion/theme.ts`, `editor-remotion/EditVideo.tsx` |
 | Cut rules (padding, caption length) | constants at the top of `server/bots/editor/compile.ts` |
 | Scheduling rules | `server/bots/scheduler.ts` |
+| Output folder file names and contents | `server/bots/output.ts` |
 | Posting to TikTok / Facebook / Instagram / YouTube | implement `PostingAdapter` in `server/bots/posting.ts` |
 | Office layout | `DESKS` / `LOUNGE` in `app/src/views/Office.tsx` |
 | Live events for new UI | subscribe to the `EventBus` in `server/core/events.ts` |
 
 ## Your data
 
-Everything stays in `data/`: videos, covers, captions, schedules, edits, style examples and `settings.json` (which holds your keys). It's gitignored.
+Everything stays in `data/`: videos, covers, captions, schedules, edits, style examples, the default `output/` folder and `settings.json` (which holds your keys). It's gitignored.
 
 ## Tests
 
@@ -84,8 +102,8 @@ All tests use fake AI providers, so they run free and need no keys.
 
 | Command | What runs |
 |---|---|
-| `npm test` | Vitest, 64 tests: thumbnail scoring, caption prompts, scheduler rules, format helpers, the timeline compiler, the Claude Code CLI provider (with a fake `claude` command), the settings allowlist, the full pipeline over HTTP, and a real Remotion render of a first version and a revised one |
-| `npm run test:e2e` | Playwright, 31 tests in a real Chromium: every page and panel, uploading and dropping videos, Run everything and Running, caption rules and style training, scheduler changes, the keyless Claude Code default and switching to API keys, the office canvas (including a live hand-off reel and the batch celebration), the editor → Review → revise loop, and keys never reaching the browser |
+| `npm test` | Vitest, 94 tests: thumbnail scoring, caption prompts, scheduler rules, format helpers, the timeline compiler, the Claude Code CLI provider (with a fake `claude` command), the settings allowlist, the output folder, security and settings checks, restart recovery, the full pipeline over HTTP, and a real Remotion render of a first version and a revised one |
+| `npm run test:e2e` | Playwright, 33 tests in a real Chromium: every page and panel, uploading and dropping videos, Run everything and Running, caption rules and style training, scheduler changes, the keyless Claude Code default and switching to API keys, the office canvas (including a live hand-off reel and the batch celebration), the editor → Review → revise loop, and keys never reaching the browser |
 | `npm run test:all` | Typecheck, then both of the above |
 
 The first time, install the test browser with `npx playwright install chromium`. The UI tests build the app and start their own server on port 4848 with a fresh data folder each run (`tests/e2e-server.ts`). After a failure, `npx playwright show-trace` opens the saved trace from `test-results/`.

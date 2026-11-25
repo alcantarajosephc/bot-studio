@@ -19,7 +19,41 @@ let input = "";
 process.stdin.setEncoding("utf8");
 process.stdin.on("data", (d) => (input += d));
 process.stdin.on("end", () => {
-  fs.writeFileSync(path.join(here, "record.json"), JSON.stringify({ args: process.argv.slice(2), stdin: input }));
+  const args = process.argv.slice(2);
+  const at = (flag) => args[args.indexOf(flag) + 1];
+  const systemFile = args.includes("--system-prompt-file") ? at("--system-prompt-file") : null;
+  const system = systemFile && fs.existsSync(systemFile) ? fs.readFileSync(systemFile, "utf8") : null;
+  fs.writeFileSync(path.join(here, "record.json"), JSON.stringify({ args, stdin: input, system }));
+  // Mirror the real CLI: --json-schema takes JSON text, not a file path.
+  if (args.includes("--json-schema")) {
+    let schema;
+    try { schema = JSON.parse(at("--json-schema")); } catch {
+      process.stderr.write("Error: --json-schema is not valid JSON\\n");
+      process.exit(1);
+    }
+    // Real CLI quirk: a schema with a "$schema" key is silently ignored and the model answers in prose.
+    if (schema && schema.$schema) {
+      process.stdout.write(JSON.stringify({ type: "result", is_error: false, result: "**Here's a caption** for you! #tips" }));
+      process.exit(0);
+    }
+  }
+  if (systemFile && system === null) {
+    process.stderr.write("Error: system prompt file not found\\n");
+    process.exit(1);
+  }
+  if (mode === "old-cli") {
+    // Real CLI output when the model needs a newer version: JSON on stdout, exit code 1.
+    process.stdout.write(JSON.stringify({ type: "result", subtype: "success", is_error: true, api_error_status: 400, result: "API Error: 400 Claude Code 2.1.201 does not support this model; version 2.1.280 or newer is required. Run 'claude update', or update the Claude desktop app, then try again." }));
+    process.exit(1);
+  }
+  if (mode === "rate-limited") {
+    process.stdout.write(JSON.stringify({ type: "result", is_error: true, api_error_status: 429, result: "API Error: 429 You've hit your usage limit. Resets at 5pm." }));
+    process.exit(0);
+  }
+  if (mode === "structured") {
+    process.stdout.write(JSON.stringify({ type: "result", is_error: false, result: "Done.", structured_output: { caption: "From structured", keywords: ["s"] } }));
+    process.exit(0);
+  }
   if (mode === "not-signed-in") {
     process.stderr.write("Invalid API key · Please run /login to sign in\\n");
     process.exit(1);
@@ -74,30 +108,35 @@ afterEach(() => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-function readRecord(): { args: string[]; stdin: string } {
+function readRecord(): { args: string[]; stdin: string; system: string | null } {
   return JSON.parse(fs.readFileSync(path.join(dir, "record.json"), "utf8"));
 }
 
+const SCHEMA_JSON = JSON.stringify({ type: "object", properties: { a: { type: "string" } } });
+
 describe("buildClaudeArgs", () => {
-  it("passes the system prompt, model and json schema, and never the prompt or dangerous flags", () => {
-    const args = buildClaudeArgs({ system: "be a caption bot" }, { schemaFile: "/tmp/s.json", mcpConfigFile: "/tmp/m.json" }, "claude-opus-5-5");
+  it("passes the system prompt file, model and inline json schema, and never the prompt or dangerous flags", () => {
+    const args = buildClaudeArgs({ effort: "high" }, { schemaJson: SCHEMA_JSON, systemFile: "/tmp/system.md", mcpConfigFile: "/tmp/m.json" }, "claude-opus-5-5");
     expect(args).toContain("-p");
-    expect(args).toContain("--output-format");
     expect(args[args.indexOf("--output-format") + 1]).toBe("json");
-    expect(args[args.indexOf("--system-prompt") + 1]).toBe("be a caption bot");
+    expect(args[args.indexOf("--system-prompt-file") + 1]).toBe("/tmp/system.md");
     expect(args[args.indexOf("--model") + 1]).toBe("claude-opus-5-5");
-    expect(args[args.indexOf("--json-schema") + 1]).toBe("/tmp/s.json");
-    // Tool denial, no permission bypass.
-    expect(args).toContain("--allowedTools");
-    expect(args[args.indexOf("--allowedTools") + 1]).toBe("");
+    expect(args[args.indexOf("--effort") + 1]).toBe("high");
+    // The real CLI wants the schema itself as JSON text, not a path.
+    expect(JSON.parse(args[args.indexOf("--json-schema") + 1])).toEqual(JSON.parse(SCHEMA_JSON));
+    // No tools at all, no personal settings/hooks/CLAUDE.md, no saved sessions, no permission bypass.
+    expect(args[args.indexOf("--tools") + 1]).toBe("");
+    expect(args[args.indexOf("--setting-sources") + 1]).toBe("");
+    expect(args).toContain("--no-session-persistence");
     expect(args).toContain("--strict-mcp-config");
     expect(args).toContain("--mcp-config");
     expect(args).not.toContain("--dangerously-skip-permissions");
   });
 
-  it("omits --model when no model is set", () => {
-    const args = buildClaudeArgs({ system: "x" }, { schemaFile: "/s", mcpConfigFile: "/m" }, "");
+  it("omits --model and --effort when not set", () => {
+    const args = buildClaudeArgs({}, { schemaJson: SCHEMA_JSON, systemFile: "/s", mcpConfigFile: "/m" }, "");
     expect(args).not.toContain("--model");
+    expect(args).not.toContain("--effort");
   });
 });
 
@@ -109,7 +148,9 @@ describe("ClaudeCodeProvider.generateObject", () => {
 
     const rec = readRecord();
     expect(rec.args).toContain("-p");
-    expect(rec.args[rec.args.indexOf("--system-prompt") + 1]).toBe("be a caption bot");
+    // The system prompt travels in a file (Windows caps command lines at ~32K chars).
+    expect(rec.system).toBe("be a caption bot");
+    expect(rec.args).not.toContain("be a caption bot");
     expect(rec.args[rec.args.indexOf("--model") + 1]).toBe("claude-opus-5-5");
     expect(rec.args).toContain("--json-schema");
     // The prompt must not leak onto the command line.
@@ -154,6 +195,34 @@ describe("ClaudeCodeProvider.generateObject", () => {
     setMode("schema-violation");
     const provider = new ClaudeCodeProvider("m");
     await expect(provider.generateObject({ system: "s", prompt: "p", schema: Schema })).rejects.toThrow();
+  });
+
+  it("passes the CLI's own error message through instead of a vague one", async () => {
+    setMode("old-cli");
+    const provider = new ClaudeCodeProvider("m");
+    const err = await provider.generateObject({ system: "s", prompt: "p", schema: Schema }).catch((e: Error) => e);
+    expect(String(err)).toMatch(/does not support this model.*claude update/);
+    expect(String(err)).not.toMatch(/not signed in|exited with code/);
+  });
+
+  it("explains usage limits", async () => {
+    setMode("rate-limited");
+    const provider = new ClaudeCodeProvider("m");
+    await expect(provider.generateObject({ system: "s", prompt: "p", schema: Schema })).rejects.toThrow(/usage limit/);
+  });
+
+  it("prefers the CLI's structured_output over the result text", async () => {
+    setMode("structured");
+    const provider = new ClaudeCodeProvider("m");
+    const out = await provider.generateObject({ system: "s", prompt: "p", schema: Schema });
+    expect(out).toEqual({ caption: "From structured", keywords: ["s"] });
+  });
+
+  it("handles a system prompt longer than a Windows command line allows", async () => {
+    const system = "rule ".repeat(10_000);
+    const provider = new ClaudeCodeProvider("m");
+    await provider.generateObject({ system, prompt: "p", schema: Schema });
+    expect(readRecord().system).toBe(system);
   });
 
   it("AC-10 robustness: parses JSON the model wrapped in a ```json fence and prose", async () => {

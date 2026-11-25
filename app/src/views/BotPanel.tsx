@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { CaptionRules, PublicSettings, ScheduleSettings, VideoRecord } from "../../../shared/types";
 import type { LiveState } from "../lib/live";
 import { api, uploadVideos } from "../lib/api";
+import { setupProblem } from "../lib/setup";
 import { Sprite } from "../components/Sprite";
 import { fmtDateTime, fmtTime, fromLocalInput, toLocalInput } from "../lib/format";
 
@@ -11,6 +12,7 @@ const STAGE_LABEL: Record<VideoRecord["stage"], string> = {
   captioning: "captioning",
   captioned: "captioned",
   scheduled: "scheduled",
+  done: "saved",
   error: "error",
 };
 
@@ -23,8 +25,8 @@ export function BotPanel({ id, live, onClose }: { id: string; live: LiveState; o
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const title = id === "library" ? "Drop videos" : (meta?.name ?? id);
-  const sub = id === "library" ? "Every video the bots know about" : meta?.personality;
+  const title = id === "library" ? "Drop videos" : id === "output" ? "Output folder" : (meta?.name ?? id);
+  const sub = id === "library" ? "Every video the bots know about" : id === "output" ? "Where finished videos are saved" : meta?.personality;
   let body: ReactNode = null;
   if (id === "library") body = <Library live={live} />;
   else if (id === "thumbnail") body = <ThumbnailPanel live={live} />;
@@ -32,13 +34,14 @@ export function BotPanel({ id, live, onClose }: { id: string; live: LiveState; o
   else if (id === "scheduler") body = <SchedulerPanel live={live} />;
   else if (id === "posting") body = <PostingPanel live={live} />;
   else if (id === "manager") body = <ManagerPanel live={live} />;
+  else if (id === "output") body = <OutputPanel live={live} />;
 
   return (
     <>
       <div className="drawer-backdrop" onClick={onClose} />
       <aside className="drawer" role="dialog" aria-label={title}>
         <div className="drawer-head">
-          {meta ? <Sprite color={meta.color} status={state?.status} size={44} /> : <span className="node-icon">📥</span>}
+          {meta ? <Sprite color={meta.color} status={state?.status} size={44} /> : <span className="node-icon">{id === "output" ? "📁" : "📥"}</span>}
           <div>
             <h2>{title}</h2>
             <p>{sub}</p>
@@ -82,9 +85,9 @@ function VideoRow({ v, live, children }: { v: VideoRecord; live: LiveState; chil
       <div style={{ minWidth: 0 }}>
         <div className="title">{v.originalName}</div>
         <div className="meta">
-          <span className={`chip ${v.stage === "error" ? "chip-red" : v.stage === "scheduled" ? "chip-green" : ""}`}>{STAGE_LABEL[v.stage]}</span>{" "}
+          <span className={`chip ${v.stage === "error" ? "chip-red" : v.stage === "scheduled" || v.stage === "done" ? "chip-green" : ""}`}>{STAGE_LABEL[v.stage]}</span>{" "}
           {v.duration ? `${fmtTime(v.duration)} · ` : ""}
-          {v.schedule ? `posts ${fmtDateTime(v.schedule.at, tz)}${v.schedule.manual ? " (your time)" : ""}` : ""}
+          {v.schedule ? `posts ${fmtDateTime(v.schedule.at, tz)}${v.schedule.manual ? " (your time)" : ""}` : v.output ? `saved as ${v.output.base}` : ""}
         </div>
         {v.error ? <div className="err">{v.error}</div> : null}
         {children}
@@ -194,9 +197,7 @@ function CaptionPanel({ live }: { live: LiveState }) {
 
   return (
     <>
-      {!live.settings?.keys.anthropic || !live.settings?.keys.groq ? (
-        <div className="banner">The caption bot needs a Groq key (to listen) and an Anthropic key (to write). Add them under Keys &amp; models.</div>
-      ) : null}
+      {setupProblem(live.settings) ? <div className="banner">{setupProblem(live.settings)}</div> : null}
       <section className="section">
         <h3>My rules</h3>
         <p className="help">How the bot writes every caption.</p>
@@ -303,6 +304,15 @@ const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 function SchedulerPanel({ live }: { live: LiveState }) {
   const { draft, setDraft, dirty, save, msg } = useSettingsDraft(live, "schedule");
   if (!draft) return null;
+  if (live.settings && !live.settings.output.scheduling) {
+    return (
+      <section className="section">
+        <div className="banner">Scheduling is off. Finished videos go straight to the output folder without posting times.</div>
+        <p className="help" style={{ marginTop: 12 }}>Turn it on to have the Scheduler Bot pick posting times for every finished video. You can turn it off again any time.</p>
+        <button className="btn btn-yellow" onClick={() => api.put("/api/settings", { output: { scheduling: true } })}>Turn on scheduling</button>
+      </section>
+    );
+  }
   const set = (p: Partial<ScheduleSettings>) => setDraft({ ...draft, ...p });
   const tz = draft.timezone;
   const queue = live.videos.filter((v) => v.stage === "captioned" || v.stage === "scheduled");
@@ -490,15 +500,46 @@ function ManagerPanel({ live }: { live: LiveState }) {
     <section className="section">
       <h3>Team status</h3>
       <div className="grid2">
-        {([["new", "Waiting"], ["captioning", "Captioning"], ["captioned", "Captioned"], ["scheduled", "Scheduled"], ["error", "Need attention"]] as const).map(([s, label]) => (
+        {([["new", "Waiting"], ["captioning", "Captioning"], ["done", "Saved to output"], ["scheduled", "Scheduled"], ["error", "Need attention"]] as const).map(([s, label]) => (
           <div key={s} className="card">
             <div className="hint">{label}</div>
             <div style={{ fontSize: 26, fontWeight: 800 }}>{count(s)}</div>
           </div>
         ))}
       </div>
-      <p className="help" style={{ marginTop: 12 }}>Videos move through the cover, caption, scheduling and posting steps in order. Press Run everything to start anything that's waiting or failed.</p>
+      <p className="help" style={{ marginTop: 12 }}>Videos get a cover and a caption, then are saved to the output folder (and scheduled, if scheduling is on). Press Run everything to start anything that's waiting or failed.</p>
       <button className="btn btn-green" onClick={() => api.post("/api/run")}>▶ Run everything</button>
     </section>
+  );
+}
+
+// ---------- output folder ----------
+
+function OutputPanel({ live }: { live: LiveState }) {
+  const saved = live.videos.filter((v) => v.output);
+  const [err, setErr] = useState("");
+  return (
+    <>
+      <section className="section">
+        <h3>Folder</h3>
+        <p className="help">Each finished video is saved as three files: the video, its cover (.jpg) and its caption (.txt). Edited videos from the Video editor land here too. Change the folder under Keys &amp; models → Output.</p>
+        <div className="card row" style={{ justifyContent: "space-between" }}>
+          <code style={{ wordBreak: "break-all" }}>{live.settings?.outputDir}</code>
+          <button className="btn btn-yellow" onClick={() => api.post("/api/output/open").catch((e: Error) => setErr(e.message))}>Open folder</button>
+        </div>
+        {err ? <p className="err">{err}</p> : null}
+      </section>
+      <section className="section">
+        <h3>Saved videos ({saved.length})</h3>
+        <div className="vlist">
+          {saved.length === 0 ? <div className="empty">Nothing saved yet. Drop videos and press Run everything.</div> : null}
+          {saved.map((v) => (
+            <VideoRow key={v.id} v={v} live={live}>
+              <div className="hint">{v.output!.base}.mp4 · {v.output!.base}.jpg · {v.output!.base}.txt</div>
+            </VideoRow>
+          ))}
+        </div>
+      </section>
+    </>
   );
 }
